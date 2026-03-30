@@ -4,6 +4,24 @@ from io import BytesIO
 import openpyxl
 from openpyxl.utils import column_index_from_string
 
+_RE_EXT_LINK = re.compile(r'\[\d+\]')
+
+
+def _freeze_external_formulas(wb, wb_data):
+    """외부 링크 참조 수식 셀을 캐시된 값으로 대체하고 외부 링크 정의를 제거.
+
+    외부 링크를 먼저 지우면 Excel이 [1] 등을 참조하는 수식을 통째로 삭제하므로,
+    반드시 수식을 값으로 교체한 뒤 _external_links를 비워야 한다.
+    """
+    for ws, ws_data in zip(wb.worksheets, wb_data.worksheets):
+        for row in ws.iter_rows():
+            for cell in row:
+                if (isinstance(cell.value, str)
+                        and cell.value.startswith('=')
+                        and _RE_EXT_LINK.search(cell.value)):
+                    cell.value = ws_data.cell(row=cell.row, column=cell.column).value
+    wb._external_links = []
+
 CAMPUS_FULL = [
     "대치본원", "대치본원S관", "송파캠퍼스", "중계캠퍼스", "분당캠퍼스",
     "수지캠퍼스", "수지3관캠퍼스", "죽전캠퍼스", "1동탄캠퍼스", "2동탄캠퍼스",
@@ -285,8 +303,9 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     wb._sheets = [gyeonjeok] + [s for s, _ in sorted_order]
 
     cb(90, "파일 저장 중...")
-    # 외부 링크를 제거해 Excel 열기 시 복구 경고 방지
-    wb._external_links = []
+    # 외부 링크 수식을 캐시 값으로 대체한 뒤 외부 링크 정의 제거
+    # (순서 중요: 수식 먼저 교체 → 그 다음 링크 제거, 반대 순서면 Excel이 수식 삭제)
+    _freeze_external_formulas(wb, wb_data)
     output = BytesIO()
     wb.save(output)
     wb.close()
