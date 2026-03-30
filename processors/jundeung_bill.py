@@ -285,6 +285,8 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     wb._sheets = [gyeonjeok] + [s for s, _ in sorted_order]
 
     cb(90, "파일 저장 중...")
+    # 외부 링크를 제거해 Excel 열기 시 복구 경고 방지
+    wb._external_links = []
     output = BytesIO()
     wb.save(output)
     wb.close()
