@@ -217,24 +217,18 @@ def _extract_order_data(ws_data, ws_formula, type_idx: int) -> tuple[int, int] |
 # ──────────────── ZIP 복원 ────────────────
 
 _EXT_LINK_PREFIX = "xl/externalLinks/"
-_WORKBOOK_RELS   = "xl/_rels/workbook.xml.rels"
 
 
 def _restore_ext_link_xml(output_bytes: bytes, original_bytes: bytes) -> bytes:
     """openpyxl이 손상시킨 externalLink XML을 원본으로 복원해 Excel 복구 경고 방지.
 
-    복원 대상:
-      - xl/externalLinks/*.xml        외부 링크 정의
-      - xl/externalLinks/_rels/*.rels 링크별 relationship 파일
-      - xl/_rels/workbook.xml.rels    workbook 관계 파일 (rId 순서 보존)
-      - [Content_Types].xml           externalLink 파트 타입 선언
+    복원 대상: xl/externalLinks/*.xml 및 xl/externalLinks/_rels/*.rels 만.
+    workbook.xml.rels / [Content_Types].xml 은 건드리지 않는다 —
+    openpyxl이 시트 순서 변경 후 새 rId 매핑을 생성하므로 덮어쓰면 파일이 깨진다.
     """
     with zipfile.ZipFile(BytesIO(original_bytes), 'r') as orig_zip:
         orig_names = set(orig_zip.namelist())
         restore_paths = {n for n in orig_names if _EXT_LINK_PREFIX in n}
-        for extra in (_WORKBOOK_RELS, "[Content_Types].xml"):
-            if extra in orig_names:
-                restore_paths.add(extra)
         if not restore_paths:
             return output_bytes
         restore_map = {p: orig_zip.read(p) for p in restore_paths}
