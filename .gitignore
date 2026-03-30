@@ -20,6 +20,7 @@ env/
 # 빌드 결과물
 그루북.app/
 그루북.exe
+grobook.exe
 
 # macOS
 .DS_Store
