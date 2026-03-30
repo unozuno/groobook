@@ -21,7 +21,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    border: 3px solid black;
+    gap: 15mm;
     page-break-after: always;
     max-height: 194mm;
   }
@@ -43,12 +43,8 @@
     line-height: 1.2;
     min-width: 0;
     min-height: 0;
+    border: 3px solid black;
   }
-
-  /* 내부 구분선 */
-  .cell-left     { border-right: 2.5px solid black; }
-  .cell-bottom   { border-top: 2.5px solid black; }
-  .cell-bottom-r { border-top: 2.5px solid black; }
 
   /* 좌상: 캠퍼스이름 */
   .campus-name     { font-size: 72pt; }
@@ -68,14 +64,14 @@
 {% for slip in slips %}
 <div class="slip">
   <!-- 좌상: 캠퍼스이름 -->
-  <div class="cell cell-left campus-name">{{ slip[0] }}</div>
+  <div class="cell campus-name">{{ slip[0] }}</div>
   <!-- 우상: 제품명 -->
   <div class="cell product-name">{{ slip[1] }}</div>
 
   <!-- 좌하: 부수 -->
-  <div class="cell cell-left cell-bottom qty">{{ slip[4] }}</div>
+  <div class="cell qty">{{ slip[4] }}</div>
   <!-- 우하: 총덩이-현덩이 -->
-  <div class="cell cell-bottom-r packing-counter">{{ slip[5] }}-{{ slip[7] }}</div>
+  <div class="cell packing-counter">{{ slip[5] }}-{{ slip[7] }}</div>
 </div>
 {% endfor %}
 
