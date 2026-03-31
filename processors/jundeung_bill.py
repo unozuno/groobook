@@ -1,3 +1,4 @@
+import math
 import re
 from io import BytesIO
 
@@ -260,6 +261,9 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
 
     sorted_titles = [s.title for s, _ in sorted(sheet_meta, key=sort_key)]
 
+    total_qty = sum(t["qty"] for t in campus_totals.values())
+    total_amt = sum(t["amt"] for t in campus_totals.values())
+
     wb.close()
     wb_data.close()
     del wb, wb_data
@@ -270,6 +274,10 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     cb(50, "견적서 작성 중...")
     wb_out = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
     gyeonjeok_out = wb_out.worksheets[0]
+
+    # 견적서 10행: J열(10)=총수량, M열(13)=총금액
+    gyeonjeok_out.cell(row=10, column=10).value = total_qty
+    gyeonjeok_out.cell(row=10, column=13).value = total_amt
 
     # 견적서 13행~에 캠퍼스별 합계 기록
     # 열B(2)=납품처(풀네임), 열G(7)=수량, 열K(11)=금액
@@ -291,12 +299,14 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     # 수식이 모두 값으로 변환됐으므로 외부 링크 정의 불필요 → 제거
     wb_out._external_links = []
 
-    # -0.0 셀을 0으로 정규화 (Excel "-0" 표시 방지)
+    # 음의 영(-0.0) 셀을 빈 칸으로 처리 (의미 없는 값이므로)
+    # 양의 0.0은 그대로 유지 (정상 값일 수 있음)
     for ws in wb_out.worksheets:
         for row in ws.iter_rows():
             for cell in row:
-                if isinstance(cell.value, float) and cell.value == 0.0:
-                    cell.value = 0
+                if isinstance(cell.value, float) and cell.value == 0.0 \
+                        and math.copysign(1.0, cell.value) < 0:
+                    cell.value = None
 
     cb(90, "파일 저장 중...")
     out_buf = BytesIO()
