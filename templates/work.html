@@ -68,7 +68,14 @@
       <div class="download-section" id="downloadSection" style="display:none;">
         <div class="success-icon">🎉</div>
         <p class="success-msg">포장전표 PDF가 완성되었습니다!</p>
+        {% if type == "midterm" %}
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+          <a class="btn-download" id="downloadBtn" href="#" style="text-align:center;">PDF 다운로드</a>
+          <a class="btn-download" id="downloadExcelBtn" href="#" style="text-align:center;">엑셀 다운로드</a>
+        </div>
+        {% else %}
         <a class="btn-download" id="downloadBtn" href="#">PDF 다운로드</a>
+        {% endif %}
       </div>
 
       <!-- 에러 -->
@@ -177,6 +184,9 @@
       document.getElementById('progressSection').style.display = 'none';
       document.getElementById('downloadSection').style.display = 'flex';
       document.getElementById('downloadBtn').href = `/api/download/${taskId}`;
+      {% if type == "midterm" %}
+      document.getElementById('downloadExcelBtn').href = `/api/download/${taskId}/excel`;
+      {% endif %}
     }
 
     function showError(msg) {

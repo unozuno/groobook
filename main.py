@@ -160,9 +160,11 @@ async def process(
             elif proc_type == "quarterly":
                 slip_list = process_quarterly(file_bytes, progress_cb)
             else:
-                slip_list = process_midterm(
+                slip_list, excel_bytes = process_midterm(
                     file_bytes, main_banding, mini_banding, teacher_banding, progress_cb
                 )
+                tasks[task_id]["result_bytes_excel"] = excel_bytes
+                tasks[task_id]["filename_excel"] = f"{original_name}_배본표_{task_id[:8]}.xlsx"
 
             pdf_bytes = render_pdf(slip_list, progress_cb, proc_type=proc_type)
             tasks[task_id]["result_bytes"] = pdf_bytes
@@ -197,10 +199,33 @@ async def download(task_id: str):
     file_bytes = task["result_bytes"]
     filename = task["filename"]
     content_type = task.get("content_type", "application/pdf")
-    tasks.pop(task_id, None)
+    # 엑셀이 없거나 이미 엑셀도 다운로드됐으면 태스크 삭제
+    if not task.get("result_bytes_excel") or task.get("excel_downloaded"):
+        tasks.pop(task_id, None)
+    else:
+        task["pdf_downloaded"] = True
     return Response(
         content=file_bytes,
         media_type=content_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@app.get("/api/download/{task_id}/excel")
+async def download_excel(task_id: str):
+    task = tasks.get(task_id)
+    if not task or task["status"] != "done" or not task.get("result_bytes_excel"):
+        raise HTTPException(status_code=404, detail="배본표 엑셀 파일이 없습니다.")
+    file_bytes = task["result_bytes_excel"]
+    filename = task["filename_excel"]
+    # PDF도 다운로드됐으면 태스크 삭제
+    if task.get("pdf_downloaded"):
+        tasks.pop(task_id, None)
+    else:
+        task["excel_downloaded"] = True
+    return Response(
+        content=file_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
