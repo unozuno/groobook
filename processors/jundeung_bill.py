@@ -1,5 +1,4 @@
 import re
-import zipfile
 from io import BytesIO
 
 import openpyxl
@@ -73,11 +72,9 @@ def _eval(ws, expr: str, depth: int):
         return _eval_sum(ws, m.group(1).strip(), depth)
 
     # 셀 참조들의 사칙연산 체인: A1+B1, D10+E10, F10*H10, A1+B1+C1 등
-    # 셀 참조 패턴: 선택적 $ + 열문자 + 선택적 $ + 행숫자
     _CELL = r'\$?[A-Za-z]+\$?\d+'
     if re.fullmatch(rf'({_CELL})([+\-*/]({_CELL}))+', expr):
         parts = re.split(r'([+\-*/])', expr)
-        # parts = [셀, 연산자, 셀, 연산자, 셀, ...]
         r, c = _cell_ref_to_rc(parts[0])
         if r is None:
             return None
@@ -178,11 +175,9 @@ def _find_hapgye_row(sheet, key_col: int) -> int | None:
 
 def _get_val_with_cache(ws_data, ws_formula, row, col, depth=0):
     """캐시값 우선, 없으면 수식 평가. ws_data=data_only 시트, ws_formula=수식 시트."""
-    # 1순위: data_only 캐시
     v = ws_data.cell(row=row, column=col).value
     if isinstance(v, (int, float)):
         return float(v)
-    # 2순위: 수식 평가 (외부 참조는 불가, 내부 수식만 처리)
     return _get_val(ws_formula, row, col, depth)
 
 
@@ -199,7 +194,6 @@ def _extract_order_data(ws_data, ws_formula, type_idx: int) -> tuple[int, int] |
     qty = _get_val_with_cache(ws_data, ws_formula, row_num, qty_col)
     amt = _get_val_with_cache(ws_data, ws_formula, row_num, amt_col)
 
-    # 합계 행 평가 실패 시 위 행들을 직접 합산
     if qty is None:
         qty = sum(
             v for r in range(1, row_num)
@@ -214,44 +208,6 @@ def _extract_order_data(ws_data, ws_formula, type_idx: int) -> tuple[int, int] |
     return (int(qty), int(amt))
 
 
-# ──────────────── ZIP 복원 ────────────────
-
-_EXT_LINK_PREFIX = "xl/externalLinks/"
-
-
-def _restore_ext_link_xml(output_bytes: bytes, original_bytes: bytes) -> bytes:
-    """openpyxl이 손상시킨 externalLink XML을 원본으로 복원해 Excel 복구 경고 방지.
-
-    복원 대상: xl/externalLinks/*.xml 및 xl/externalLinks/_rels/*.rels 만.
-    workbook.xml.rels / [Content_Types].xml 은 건드리지 않는다 —
-    openpyxl이 시트 순서 변경 후 새 rId 매핑을 생성하므로 덮어쓰면 파일이 깨진다.
-    """
-    with zipfile.ZipFile(BytesIO(original_bytes), 'r') as orig_zip:
-        orig_names = set(orig_zip.namelist())
-        restore_paths = {n for n in orig_names if _EXT_LINK_PREFIX in n}
-        if not restore_paths:
-            return output_bytes
-        restore_map = {p: orig_zip.read(p) for p in restore_paths}
-
-    new_out = BytesIO()
-    with zipfile.ZipFile(BytesIO(output_bytes), 'r') as out_zip, \
-         zipfile.ZipFile(new_out, 'w', zipfile.ZIP_DEFLATED) as new_zip:
-        written = set()
-        for item in out_zip.infolist():
-            data = restore_map.get(item.filename, out_zip.read(item.filename))
-            new_zip.writestr(item, data)
-            written.add(item.filename)
-        # openpyxl이 누락시킨 externalLink 파일 복원
-        for path, content in restore_map.items():
-            if path not in written:
-                new_zip.writestr(path, content)
-
-    return new_out.getvalue()
-
-
-# ──────────────────────────────────────────────
-
-
 def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     """
     청구서 엑셀 파일을 처리해 견적서를 자동 작성하고 시트를 정렬한 뒤
@@ -262,7 +218,6 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
             progress_cb(pct, msg)
 
     # ── Phase 1: 추출 ─────────────────────────────────────────────
-    # wb_data, wb 는 값 계산 전용. 출력 파일로 저장하지 않는다.
     cb(5, "파일 읽는 중...")
     wb_data = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
     wb      = openpyxl.load_workbook(BytesIO(file_bytes))
@@ -305,15 +260,15 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
 
     sorted_titles = [s.title for s, _ in sorted(sheet_meta, key=sort_key)]
 
-    # 추출 완료 — 메모리 해제 후 출력 워크북 로드
     wb.close()
     wb_data.close()
     del wb, wb_data
 
     # ── Phase 2: 출력 워크북 작성 ─────────────────────────────────
-    # 원본에서 새로 로드해 발주서 시트를 일절 건드리지 않는다.
+    # data_only=True 로 로드 → 모든 수식 셀이 캐시된 정적 값으로 변환됨
+    # 외부 링크 수식도 이미 값이므로 _external_links 제거가 안전하고 경고도 사라짐
     cb(50, "견적서 작성 중...")
-    wb_out = openpyxl.load_workbook(BytesIO(file_bytes))
+    wb_out = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
     gyeonjeok_out = wb_out.worksheets[0]
 
     # 견적서 13행~에 캠퍼스별 합계 기록
@@ -333,16 +288,21 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     sorted_sheets  = [title_to_sheet[t] for t in sorted_titles if t in title_to_sheet]
     wb_out._sheets = [gyeonjeok_out] + sorted_sheets
 
+    # 수식이 모두 값으로 변환됐으므로 외부 링크 정의 불필요 → 제거
+    wb_out._external_links = []
+
+    # -0.0 셀을 0으로 정규화 (Excel "-0" 표시 방지)
+    for ws in wb_out.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, float) and cell.value == 0.0:
+                    cell.value = 0
+
     cb(90, "파일 저장 중...")
     out_buf = BytesIO()
     wb_out.save(out_buf)
     wb_out.close()
     del wb_out
 
-    # ── Phase 3: ZIP 복원 ─────────────────────────────────────────
-    # openpyxl이 imperfect하게 재직렬화한 externalLink XML을 원본으로 교체해
-    # Excel 열기 시 "복구된 레코드" 경고를 제거한다.
-    final_bytes = _restore_ext_link_xml(out_buf.getvalue(), file_bytes)
-
     cb(100, "완료!")
-    return final_bytes
+    return out_buf.getvalue()
