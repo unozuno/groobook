@@ -39,12 +39,13 @@
       <!-- Step 1: 파일 업로드 + 스캔 -->
       <div id="stepScan" style="display:none;">
         <div class="upload-area" id="uploadArea">
-          <input type="file" id="fileInput" accept=".xlsx" multiple hidden>
+          <input type="file" id="fileInput" accept=".xlsx,.xlsm" multiple hidden>
           <div class="upload-content" id="uploadContent">
             <div class="upload-icon">📂</div>
             <p class="upload-text">청구서 파일을 드래그하거나 클릭하여 선택</p>
             <p class="upload-hint">.xlsx 파일 여러 개 동시 선택 가능</p>
-            <p class="upload-hint">파일명 형식: YYYY년 MM월 캠퍼스명 청구서_내신교재.xlsx</p>
+            <p class="upload-hint">파일명 형식: YYYY년 MM월 캠퍼스명 청구서_[유형].xlsx(.xlsm)</p>
+            <p class="upload-hint">유형: 내신교재 / 소모품 / 소모품(일반) / 소모품(교재)</p>
           </div>
           <div class="upload-selected" id="uploadSelected" style="display:none;">
             <div class="upload-icon">✅</div>
@@ -203,7 +204,7 @@
     });
 
     function setFiles(files) {
-      selectedFiles = files.filter(f => f.name.endsWith('.xlsx'));
+      selectedFiles = files.filter(f => f.name.endsWith('.xlsx') || f.name.endsWith('.xlsm'));
       if (selectedFiles.length === 0) return;
       document.getElementById('uploadContent').style.display = 'none';
       document.getElementById('uploadSelected').style.display = 'flex';

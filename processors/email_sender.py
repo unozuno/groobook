@@ -8,6 +8,7 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -15,7 +16,7 @@ load_dotenv()
 
 CAMPUS_EMAILS_PATH = Path(__file__).parent.parent / "campus_emails.json"
 FILENAME_PATTERN = re.compile(
-    r'(\d{4})년\s+(\d{1,2})월\s+(.+?)\s+청구서_(내신교재|소모품)(?:\.xlsx)?'
+    r'(\d{4})년\s+(\d{1,2})월\s+(.+?)\s+청구서_(내신교재|소모품(?:\(일반\)|\(교재\))?)(?:\.xlsx?m?)?'
 )
 
 
@@ -151,10 +152,10 @@ def send_billing_emails(
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(file_info["bytes"])
                 encoders.encode_base64(part)
-                sanitized_filename = re.sub(r'[^\w가-힣._-]', '_', file_info['filename'])
+                encoded_filename = quote(file_info['filename'], safe='')
                 part.add_header(
                     "Content-Disposition",
-                    f"attachment; filename*=UTF-8''{sanitized_filename}",
+                    f"attachment; filename*=UTF-8''{encoded_filename}",
                 )
                 msg.attach(part)
 
