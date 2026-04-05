@@ -15,7 +15,15 @@
       "Bash(./venv/Scripts/pip install:*)",
       "Bash(curl -X POST http://127.0.0.1:8000/logout -v)",
       "Bash(curl -X POST http://127.0.0.1:8000/logout -c /tmp/cookies.txt -b \"groobook_session=test\" -v)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(find /Users/jeongjunho/Desktop/groobook-web -name *.css -o -name *.js)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(git rm:*)",
+      "Bash(grep -r uvicorn /Users/jeongjunho/Desktop/groobook-web --include=*.py --include=*.md --include=*.sh -n)",
+      "Bash(chmod:*)",
+      "Bash(git cherry:*)",
+      "Bash(find /Users/jeongjunho/Desktop/groobook-web -type f \\\\\\(-name *.xls* -o -name *.zip \\\\\\))"
     ]
   }
 }
