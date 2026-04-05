@@ -29,9 +29,12 @@ _COL_MAP = {
     TYPE_YESANG: (2, 6, 9),
 }
 
-# 정규식: 캠퍼스 단축명을 길이 내림차순으로 정렬해 longest-match 보장
-_sorted_short = sorted(CAMPUS_SHORT, key=len, reverse=True)
-_campus_pat = "|".join(re.escape(c) for c in _sorted_short)
+# 정규식: 캠퍼스 단축명/전체명 모두 지원, 길이 내림차순으로 longest-match 보장
+_name_to_idx: dict[str, int] = {}
+for _i, (_full, _short) in enumerate(zip(CAMPUS_FULL, CAMPUS_SHORT)):
+    _name_to_idx[_full] = _i
+    _name_to_idx[_short] = _i
+_campus_pat = "|".join(re.escape(c) for c in sorted(_name_to_idx.keys(), key=len, reverse=True))
 
 _RE_NOTE   = re.compile(rf"^({_campus_pat})노트$")
 _RE_BOOK   = re.compile(rf"^({_campus_pat})(중[123])(_[0-9]+)?$")
@@ -129,7 +132,7 @@ def parse_sheet_name(name: str) -> dict | None:
     m = _RE_NOTE.match(name)
     if m:
         return {
-            "campus_idx": CAMPUS_SHORT.index(m.group(1)),
+            "campus_idx": _name_to_idx[m.group(1)],
             "type_idx": TYPE_NOTE,
             "grade": 0,
             "extra": 0,
@@ -138,7 +141,7 @@ def parse_sheet_name(name: str) -> dict | None:
     m = _RE_BOOK.match(name)
     if m:
         return {
-            "campus_idx": CAMPUS_SHORT.index(m.group(1)),
+            "campus_idx": _name_to_idx[m.group(1)],
             "type_idx": TYPE_BOOK,
             "grade": int(m.group(2)[1]),
             "extra": int(m.group(3)[1:]) if m.group(3) else 0,
@@ -147,7 +150,7 @@ def parse_sheet_name(name: str) -> dict | None:
     m = _RE_GICHUL.match(name)
     if m:
         return {
-            "campus_idx": CAMPUS_SHORT.index(m.group(1)),
+            "campus_idx": _name_to_idx[m.group(1)],
             "type_idx": TYPE_GICHUL,
             "grade": int(m.group(2)[1]) if m.group(2) else 0,
             "extra": 0,
@@ -156,7 +159,7 @@ def parse_sheet_name(name: str) -> dict | None:
     m = _RE_YESANG.match(name)
     if m:
         return {
-            "campus_idx": CAMPUS_SHORT.index(m.group(1)),
+            "campus_idx": _name_to_idx[m.group(1)],
             "type_idx": TYPE_YESANG,
             "grade": int(m.group(2)[1]),
             "extra": int(m.group(3)[1:]) if m.group(3) else 0,
@@ -279,17 +282,26 @@ def process_jundeung_bill(file_bytes: bytes, progress_cb=None) -> bytes:
     gyeonjeok_out.cell(row=10, column=10).value = total_qty
     gyeonjeok_out.cell(row=10, column=13).value = total_amt
 
-    # 견적서 13행~에 캠퍼스별 합계 기록
+    # 36행 IJ열(병합), KLM열(병합) / 38행 KLM열(병합) — 총금액
+    gyeonjeok_out.cell(row=36, column=9).value  = total_amt
+    gyeonjeok_out.cell(row=36, column=11).value = total_amt
+    gyeonjeok_out.cell(row=38, column=11).value = total_amt
+
+    # 견적서 13행~에 캠퍼스별 합계 기록 (고정 행 위치: 13+cidx)
     # 열B(2)=납품처(풀네임), 열G(7)=수량, 열K(11)=금액
-    write_row = 13
+    # 먼저 이전 실행 캐시(수량/금액) 클리어
+    for _r in range(13, 13 + len(CAMPUS_FULL)):
+        gyeonjeok_out.cell(row=_r, column=7).value = None
+        gyeonjeok_out.cell(row=_r, column=11).value = None
+
     for cidx, full_name in enumerate(CAMPUS_FULL):
         if cidx not in campus_totals:
             continue
+        row_num = 13 + cidx
         totals = campus_totals[cidx]
-        gyeonjeok_out.cell(row=write_row, column=2).value  = full_name
-        gyeonjeok_out.cell(row=write_row, column=7).value  = totals["qty"]
-        gyeonjeok_out.cell(row=write_row, column=11).value = totals["amt"]
-        write_row += 1
+        gyeonjeok_out.cell(row=row_num, column=2).value  = full_name
+        gyeonjeok_out.cell(row=row_num, column=7).value  = totals["qty"]
+        gyeonjeok_out.cell(row=row_num, column=11).value = totals["amt"]
 
     cb(70, "시트 정렬 중...")
     title_to_sheet = {ws.title: ws for ws in wb_out.worksheets[1:]}
