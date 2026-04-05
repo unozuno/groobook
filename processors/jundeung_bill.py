@@ -35,7 +35,7 @@ _campus_pat = "|".join(re.escape(c) for c in _sorted_short)
 
 _RE_NOTE   = re.compile(rf"^({_campus_pat})노트$")
 _RE_BOOK   = re.compile(rf"^({_campus_pat})(중[123])(_[0-9]+)?$")
-_RE_GICHUL = re.compile(rf"^({_campus_pat})기출$")
+_RE_GICHUL = re.compile(rf"^({_campus_pat})(중[123])?기출$")
 _RE_YESANG = re.compile(rf"^({_campus_pat})(중[123]예상문제)(_[0-9]+)?$")
 
 # ──────────────── 수식 평가기 ────────────────
@@ -149,7 +149,7 @@ def parse_sheet_name(name: str) -> dict | None:
         return {
             "campus_idx": CAMPUS_SHORT.index(m.group(1)),
             "type_idx": TYPE_GICHUL,
-            "grade": 0,
+            "grade": int(m.group(2)[1]) if m.group(2) else 0,
             "extra": 0,
         }
 
