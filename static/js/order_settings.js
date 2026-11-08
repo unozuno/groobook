@@ -10,6 +10,7 @@
     selectedTypeId: null,
     dirty: false,
     tab: 'types',
+    priceTypeId: null,
   };
 
   const fieldLabel = id => (state.meta.fields.find(f => f.id === id) || {}).label || id;
@@ -344,6 +345,116 @@
     });
   }
 
+  // ───────────── 단가표 ─────────────
+  const PRICE_COND_FIELDS = ['binding_method', 'inner_paper', 'inner_print', 'inner_size', 'cover_paper', 'cover_print', 'cover_size'];
+  const PRICE_KINDS = { manual: '직접 입력', fixed: '고정 금액', per_page: '페이지 × 단가 + 기본액' };
+
+  const priceKind = r => (r.price ? r.price.kind : 'manual');
+  const numOrNull = v => (String(v).trim() === '' ? null : Number(String(v).replace(/,/g, '')));
+  const numVal = v => (v == null ? '' : String(v));
+
+  function priceRulesOfType() {
+    return state.settings.price_rules.filter(r => r.type_id === state.priceTypeId);
+  }
+
+  function renderPrices() {
+    const s = state.settings;
+    const sel = $('priceType');
+    if (!s.types.some(t => t.id === state.priceTypeId)) state.priceTypeId = s.types[0]?.id ?? null;
+    sel.innerHTML = s.types.map(t => `<option value="${esc(t.id)}" ${t.id === state.priceTypeId ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    $('priceCount').textContent = `전체 ${s.price_rules.length}줄`;
+    const heads = PRICE_COND_FIELDS.map(f => {
+      const m = state.meta.fields.find(x => x.id === f);
+      return `<th style="min-width:130px;">${esc(m ? `${m.group} ${m.label}` : f)}</th>`;
+    }).join('');
+    $('priceHead').innerHTML = `<tr><th>#</th>${heads}<th style="min-width:110px;">수량(총 발주수량)</th><th style="min-width:60px;">페이지</th><th style="min-width:150px;">방식</th><th style="min-width:90px;">금액 / 페이지당</th><th style="min-width:80px;">기본액</th><th></th></tr>`;
+    const rules = priceRulesOfType();
+    $('priceBody').innerHTML = rules.length ? rules.map((r, i) => {
+      const kind = priceKind(r);
+      const conds = PRICE_COND_FIELDS.map(f => `<td><input type="text" data-pc="${f}" value="${esc((r.when[f] || []).join(', '))}"></td>`).join('');
+      const amount = kind === 'fixed' ? r.price.amount : kind === 'per_page' ? r.price.rate : '';
+      const base = kind === 'per_page' ? r.price.base : '';
+      return `<tr data-rid="${esc(r.id)}">
+        <td class="idx">${i + 1}</td>${conds}
+        <td style="white-space:nowrap;"><input type="text" class="num" style="width:56px;" data-pf="qty_min" value="${numVal(r.qty_min)}" inputmode="numeric" placeholder="하한"> ~
+          <input type="text" class="num" style="width:56px;" data-pf="qty_max" value="${numVal(r.qty_max)}" inputmode="numeric" placeholder="상한"></td>
+        <td><input type="text" class="num" data-pf="pages" value="${numVal(r.pages)}" inputmode="numeric"></td>
+        <td><select data-pkind="1">${Object.entries(PRICE_KINDS).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+        <td><input type="text" class="num" data-pp="${kind === 'fixed' ? 'amount' : 'rate'}" value="${numVal(amount)}" inputmode="numeric" ${kind === 'manual' ? 'disabled' : ''}></td>
+        <td><input type="text" class="num" data-pp="base" value="${numVal(base)}" inputmode="numeric" ${kind === 'per_page' ? '' : 'disabled'}></td>
+        <td class="act" style="white-space:nowrap;width:128px;">
+          <button type="button" class="icon-btn" data-pact="up" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="icon-btn" data-pact="down" ${i === rules.length - 1 ? 'disabled' : ''}>▼</button>
+          <button type="button" class="icon-btn" data-pact="copy" title="복제">⧉</button>
+          <button type="button" class="icon-btn danger" data-pact="del" title="삭제">✕</button>
+        </td></tr>`;
+    }).join('') : '<tr><td colspan="13" class="hint" style="text-align:center;padding:14px;">이 제작 종류에는 단가 줄이 없습니다. 단가는 발주서 작성 시 직접 입력해야 합니다.</td></tr>';
+  }
+
+  function bindPrices() {
+    $('priceType').addEventListener('change', e => { state.priceTypeId = e.target.value; renderPrices(); });
+    const ruleOf = el => state.settings.price_rules.find(r => r.id === el.closest('tr')?.dataset.rid);
+
+    $('priceBody').addEventListener('input', e => {
+      const inp = e.target;
+      const r = ruleOf(inp);
+      if (!r) return;
+      if (inp.dataset.pc) {
+        r.when[inp.dataset.pc] = inp.value.split(',').map(v => v.trim()).filter(Boolean);
+      } else if (inp.dataset.pf) {
+        r[inp.dataset.pf] = numOrNull(inp.value);
+      } else if (inp.dataset.pp) {
+        r.price[inp.dataset.pp] = numOrNull(inp.value);
+      } else return;
+      markDirty();
+    });
+
+    $('priceBody').addEventListener('change', e => {
+      if (!e.target.dataset.pkind) return;
+      const r = ruleOf(e.target);
+      if (!r) return;
+      const kind = e.target.value;
+      r.price = kind === 'manual' ? null
+        : kind === 'fixed' ? { kind: 'fixed', amount: null, rate: null, base: null }
+        : { kind: 'per_page', amount: null, rate: null, base: 0 };
+      markDirty(); renderPrices();
+    });
+
+    $('priceBody').addEventListener('click', async e => {
+      const btn = e.target.closest('[data-pact]');
+      if (!btn) return;
+      const r = ruleOf(btn);
+      const all = state.settings.price_rules;
+      const idx = all.indexOf(r);
+      if (btn.dataset.pact === 'del') {
+        const ok = await confirmDialog({ title: '단가 줄 삭제', message: '이 단가 줄을 삭제할까요?', okText: '삭제', danger: true });
+        if (!ok) return;
+        all.splice(idx, 1);
+      } else if (btn.dataset.pact === 'copy') {
+        all.splice(idx + 1, 0, { ...JSON.parse(JSON.stringify(r)), id: uid('pr') });
+      } else {
+        // 같은 제작 종류 안의 이웃 줄과 자리를 바꾼다 (다른 종류 줄은 건너뜀)
+        const dir = btn.dataset.pact === 'up' ? -1 : 1;
+        let j = idx + dir;
+        while (j >= 0 && j < all.length && all[j].type_id !== r.type_id) j += dir;
+        if (j < 0 || j >= all.length) return;
+        [all[idx], all[j]] = [all[j], all[idx]];
+      }
+      markDirty(); renderPrices();
+    });
+
+    $('addPriceBtn').addEventListener('click', () => {
+      if (!state.priceTypeId) return;
+      const all = state.settings.price_rules;
+      let last = -1;
+      all.forEach((r, i) => { if (r.type_id === state.priceTypeId) last = i; });
+      all.splice(last + 1, 0, { id: uid('pr'), type_id: state.priceTypeId, when: {}, qty_min: null, qty_max: null, pages: null, price: { kind: 'fixed', amount: null, rate: null, base: null } });
+      markDirty(); renderPrices();
+      const rows = $('priceBody').children;
+      for (const tr of rows) if (tr.dataset.rid === all[last + 1].id) { tr.querySelector('input')?.focus(); tr.scrollIntoView({ block: 'nearest' }); }
+    });
+  }
+
   // ───────────── 기타 ─────────────
   function renderMisc() {
     $('multiLabel').value = state.settings.multi_label;
@@ -387,6 +498,12 @@
     const names = s.address_book.map(a => a.name.trim());
     if (names.some(n => !n)) problems.push('캠퍼스명이 비어 있는 주소록 항목이 있습니다.');
     if (new Set(names).size !== names.length) problems.push('주소록 캠퍼스명이 중복됩니다.');
+    const typeName = id => (s.types.find(t => t.id === id) || {}).name || id;
+    s.price_rules.forEach(r => {
+      if (r.qty_min != null && r.qty_max != null && r.qty_min > r.qty_max) problems.push(`단가표 · ${typeName(r.type_id)}: 수량 하한이 상한보다 큰 줄이 있습니다.`);
+      if (r.price && r.price.kind === 'fixed' && r.price.amount == null) problems.push(`단가표 · ${typeName(r.type_id)}: 금액이 비어 있는 고정 단가 줄이 있습니다.`);
+      if (r.price && r.price.kind === 'per_page' && r.price.rate == null) problems.push(`단가표 · ${typeName(r.type_id)}: 페이지당 금액이 비어 있는 줄이 있습니다.`);
+    });
     if (!s.multi_label.trim()) problems.push('다중 발주 표기 문구가 비어 있습니다.');
     return problems;
   }
@@ -403,6 +520,7 @@
     renderTypeEditor();
     renderMessages();
     renderAddresses();
+    renderPrices();
     renderMisc();
   }
 
@@ -498,6 +616,7 @@
     bindTypeEditorDelegates();
     bindMessages();
     bindAddresses();
+    bindPrices();
     await load();
   }
 

@@ -31,6 +31,7 @@
         <button type="button" class="tab active" data-tab="types">제작 종류</button>
         <button type="button" class="tab" data-tab="messages">전달사항 문구</button>
         <button type="button" class="tab" data-tab="addresses">주소록</button>
+        <button type="button" class="tab" data-tab="prices">단가표</button>
         <button type="button" class="tab" data-tab="misc">기타</button>
       </div>
 
@@ -71,6 +72,30 @@
           </div>
           <div class="table-actions">
             <button type="button" class="btn-small" id="addAddressBtn">+ 캠퍼스 추가</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 단가표 -->
+      <section id="tab-prices" class="tab-pane" style="display:none;">
+        <div class="banding-section">
+          <p class="section-title">단가표 <span class="hint" style="display:inline;margin-left:8px;" id="priceCount"></span></p>
+          <p class="hint" style="margin:0 0 10px;">
+            위에서부터 <b>조건이 모두 맞는 첫 줄</b>의 단가가 납품서에 자동 입력됩니다. 조건 칸을 비우면 '아무 값이나', 쉼표(,)로 구분하면 '그중 하나'입니다.
+            수량은 <b>총 발주수량</b>, 페이지는 <b>페이지합계</b> 기준이며, 방식이 '직접 입력'이면 발주서 작성 시 단가를 직접 입력해야 합니다.
+          </p>
+          <div class="field" style="max-width:240px;margin-bottom:10px;">
+            <label for="priceType">제작 종류</label>
+            <select id="priceType"></select>
+          </div>
+          <div class="table-wrap" style="margin-bottom:0;">
+            <table class="data-table" id="priceTable">
+              <thead id="priceHead"></thead>
+              <tbody id="priceBody"></tbody>
+            </table>
+          </div>
+          <div class="table-actions">
+            <button type="button" class="btn-small" id="addPriceBtn">+ 단가 줄 추가</button>
           </div>
         </div>
       </section>
