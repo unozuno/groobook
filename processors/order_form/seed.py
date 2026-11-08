@@ -7,6 +7,7 @@
 import copy
 
 from processors.order_form.fields import FIELD_IDS, ITEM_DEFAULT_KEYS
+from processors.order_form.seed_prices import SEED_PRICE_RULES
 
 SCHEMA_VERSION = 1
 
@@ -259,4 +260,5 @@ def build_seed_settings() -> dict:
         "types": SEED_TYPES,
         "rules": SEED_RULES,
         "address_book": SEED_ADDRESS_BOOK,
+        "price_rules": SEED_PRICE_RULES,
     })

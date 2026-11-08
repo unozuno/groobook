@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from processors.order_form.fields import FIELD_IDS, ITEM_DEFAULT_KEYS
+from processors.order_form.pricing_models import PriceRule
 
 
 class SettingsValidationError(ValueError):
@@ -136,6 +137,7 @@ class OrderSettings(BaseModel):
     types: list[OrderType] = Field(default_factory=list)
     rules: list[Rule] = Field(default_factory=list)
     address_book: list[AddressEntry] = Field(default_factory=list)
+    price_rules: list[PriceRule] = Field(default_factory=list)
 
     @field_validator("desktop_dir")
     @classmethod
@@ -179,6 +181,12 @@ class OrderSettings(BaseModel):
         rids = [r.id for r in self.rules]
         if len(rids) != len(set(rids)):
             raise ValueError("규칙 id 가 중복됩니다.")
+
+        pids = [p.id for p in self.price_rules]
+        if len(pids) != len(set(pids)):
+            raise ValueError("단가 규칙 id 가 중복됩니다.")
+        # 삭제된 제작 종류의 단가 규칙은 함께 정리한다 (종류 삭제를 막지 않기 위함)
+        self.price_rules = [p for p in self.price_rules if p.type_id in set(ids)]
         return self
 
 

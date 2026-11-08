@@ -101,3 +101,60 @@ def test_missing_fields_are_filled():
     del s["types"][0]["fields"]["cover_plate"]
     out = validate_settings(s)
     assert out["types"][0]["fields"]["cover_plate"] == {"options": [], "default": None}
+
+
+# ───────────────────────── 단가표 규칙 ─────────────────────────
+
+def test_seed_has_price_rules_for_every_priced_type():
+    s = validate_settings(build_seed_settings())
+    by_type = {}
+    for r in s["price_rules"]:
+        by_type.setdefault(r["type_id"], []).append(r)
+    ids = {t["id"] for t in s["types"]}
+    assert set(by_type) == ids                       # 상장·초대장 등은 price=None 규칙으로 존재
+    assert all(r["price"] is None for r in by_type["certificate"] + by_type["invitation"])
+    assert len(by_type["textbook"]) == 28
+
+
+def test_old_settings_file_without_price_rules_gets_seed(tmp_path):
+    old = build_seed_settings()
+    del old["price_rules"]
+    settings_store.settings_path().parent.mkdir(parents=True, exist_ok=True)
+    settings_store.settings_path().write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+    assert len(settings_store.load_settings()["price_rules"]) > 50
+
+
+def test_emptied_price_rules_are_respected():
+    s = settings_store.load_settings()
+    s["price_rules"] = []
+    settings_store.save_settings(s)
+    assert settings_store.load_settings()["price_rules"] == []
+
+
+def test_price_rules_of_deleted_type_are_pruned():
+    s = settings_store.load_settings()
+    s["types"] = [t for t in s["types"] if t["id"] != "textbook"]
+    settings_store.save_settings(s)
+    assert not any(r["type_id"] == "textbook" for r in settings_store.load_settings()["price_rules"])
+
+
+@pytest.mark.parametrize("mutate, fragment", [
+    (lambda r: r.update(qty_min=500, qty_max=100), "수량 하한"),
+    (lambda r: r["when"].update(nope=["x"]), "알 수 없는 필드"),
+    (lambda r: r.update(price={"kind": "fixed"}), "금액이 필요"),
+    (lambda r: r.update(price={"kind": "per_page"}), "페이지당 금액"),
+    (lambda r: r.update(price={"kind": "fixed", "amount": -1}), "amount"),
+])
+def test_invalid_price_rule_rejected(mutate, fragment):
+    s = build_seed_settings()
+    mutate(s["price_rules"][0])
+    with pytest.raises(SettingsValidationError) as exc:
+        validate_settings(s)
+    assert fragment in str(exc.value)
+
+
+def test_duplicate_price_rule_id_rejected():
+    s = build_seed_settings()
+    s["price_rules"][1]["id"] = s["price_rules"][0]["id"]
+    with pytest.raises(SettingsValidationError, match="단가 규칙 id"):
+        validate_settings(s)
