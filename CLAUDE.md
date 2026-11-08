@@ -40,7 +40,7 @@ GMAIL_APP_PASSWORD=your-16-char-app-password
 
 **`data/` directory** (git-ignored, auto-created on first use; override location with env `GROOBOOK_DATA_DIR`):
 - `data/order_settings.json` — 공통발주서 admin settings (제작 종류, 선택지/기본값, 전달사항 문구, 주소록, 조건부 규칙). Seeded from `processors/order_form/seed.py` when missing; edited via `/order-settings`. Never hand-edit while the server runs.
-- `data/orders/*.json` — archived source data of every generated 발주서 (for future 단가 자동 계산 / 청구서 연동).
+- `data/orders/*.json` — archived source data of every generated 발주서 (source of truth for later 청구서 연동).
 - Back up by copying the folder; `git pull` never touches it.
 
 **WeasyPrint system libraries** (required for PDF generation):
@@ -96,7 +96,13 @@ User confirms in a modal → generate (download) → POST /api/order-form/reflec
 - Year/month/MMDD all come from the 납품서 납품일 (발주서 납기일자). Missing file/campus block → skip (never creates files).
 - Desktop resolution: 공통설정 `desktop_dir` > env `GROOBOOK_DESKTOP_DIR` > OS auto (Windows shell API, handles OneDrive-redirected Desktop). Names are compared ignoring spaces and in NFC (macOS stores Hangul as NFD).
 - Safety (`workbook_io.py`): refuses if `~$` lock file / not writable; backs up to `data/backups/` (last 30); saves to a temp file, **re-opens and compares** every pre-existing sheet (values, styles, merges, widths, images, external links) and only then `os.replace`s. openpyxl drops cached formula values and printer settings, so `fullCalcOnLoad` is set and Excel recalculates on open.
-- Edits made in Excel after download are NOT reflected; reflection uses the values typed in the form (hence the 단가 column).
+- Edits made in Excel after download are NOT reflected; reflection uses the values typed in the form (hence the 단가 column) plus the auto 단가 below.
+
+**단가표 (unit price table)** — `settings.price_rules`, seeded from `processors/order_form/seed_prices.py` (the `단가표` sheet of `sample/발주서 단일화.xlsx`, rows 3–100; the 납품명세서 block from row 102 is NOT included) and edited in 공통설정 → 단가표 tab:
+- A rule = 제작 종류 (`type_id`) + `when` (spec field → allowed values; empty = any; list = any of) + total 발주수량 range (`qty_min/max`) + exact 페이지합계 (`pages`) + `price` (`fixed` amount, `per_page` = 페이지합계×rate+base, or `None` = 직접 입력). **First matching rule wins**, so order matters. Spec values are compared with all whitespace removed (`200 스노우` == `200스노우`).
+- Multi orders use the column-sum 발주수량 for tiers; one 단가 per 교재 for every campus 납품서.
+- Precedence per 납품서 line: typed 단가 > auto 단가 > blank. If there is no auto 단가 (상장·초대장 계열, 빈 발주서/빈 납품서, combination not in the table) and the 단가 is blank while qty > 0 → error `PRICE_REQUIRED` (mirrored in `order_form.js`, which gets the auto value from `POST /api/order-form/price-quote`; the rule engine itself is NOT duplicated in JS).
+- Deleting a 제작 종류 drops its rules on save; a settings file without the `price_rules` key is seeded on load (an explicit `[]` is respected).
 
 Modes: `order` (registered type), `blank_order` (빈 발주서, free-text spec), `blank_delivery` (빈 납품서, delivery sheet only). `order_type: multi` adds a per-campus distribution matrix → one 납품서 sheet per campus (`납품서_{캠퍼스}`), 발주수량 = column sums.
 
@@ -120,11 +126,12 @@ All task state lives in two in-memory dicts in `main.py` (`tasks`, `email_scans`
 | `campus_emails.json` | Campus name → email mapping |
 | `processors/formula_eval.py` | Minimal Excel formula evaluator (cell refs, SUM, arithmetic chains); shared by 중등 청구서 and 공통발주서 verification |
 | `processors/order_form/fields.py` | The 14 spec field ids/labels/groups — single source of truth for settings JSON, request JSON and the JS |
+| `processors/order_form/pricing_models.py` / `seed_prices.py` | 단가표 rule schema; seed rules transcribed from the sample 단가표 sheet |
 | `processors/order_form/seed.py` | Initial settings: 15 제작 종류 (지시서 4-1/4-2), rules, 53-campus address book |
 | `processors/order_form/settings_models.py` / `settings_store.py` | Pydantic schema + validation; load/save/reset of `data/order_settings.json` |
 | `processors/order_form/models.py` | `OrderRequest` (raw strings from the browser) and normalized `Order`/`Item`/`DeliveryNote` dataclasses |
 | `processors/order_form/validation.py` | Error/warning codes with Korean messages and `path`s; builds `Order` incl. per-campus deliveries |
-| `processors/order_form/compute.py` / `naming.py` / `pricing.py` / `rules.py` | Pure calculations; filename & sheet-name rules; unit-price hook (단가표 goes here later); JS-rule reference impl |
+| `processors/order_form/compute.py` / `naming.py` / `pricing.py` / `rules.py` | Pure calculations; filename & sheet-name rules; `pricing.quote` / `fill_unit_prices` (단가표 engine); JS-rule reference impl |
 | `processors/order_form/xlsx_builder.py` / `verify.py` | openpyxl sheet writers (cell map documented inline) and post-build formula verification |
 | `processors/order_form/service.py` / `archive.py` | Generate pipeline; JSON archive of each order |
 | `templates/order_form.html` + `static/js/order_form.js` | 발주서 작성 UI (state → render; combobox = `<input list>` + `<datalist>`) |
