@@ -19,6 +19,7 @@
     messages: new Set(), messageExtra: '',
     items: [], distribution: [],
     serverIssues: null,
+    quotes: [],   // 서버가 계산한 품목별 자동 단가 {status, price, reason} | null (품목 순서)
   };
 
   // ───────────── 헬퍼 ─────────────
@@ -292,14 +293,52 @@
         } else {
           const ro = c.readonly ? 'readonly tabindex="-1" class="num cell-readonly"' : `class="${c.type === 'num' ? 'num' : ''}"`;
           const val = c.readonly ? itemQty(it) : esc(it[c.key]);
-          html += `<td><input type="text" ${ro} data-i="${i}" data-k="${c.key}" data-path="${path}" value="${val}" ${c.type === 'num' ? 'inputmode="numeric"' : ''}></td>`;
+          const note = c.key === 'unitPrice' ? '<small class="price-note"></small>' : '';
+          html += `<td><input type="text" ${ro} data-i="${i}" data-k="${c.key}" data-path="${path}" value="${val}" ${c.type === 'num' ? 'inputmode="numeric"' : ''}>${note}</td>`;
         }
       }
       html += `<td class="act"><button type="button" class="icon-btn danger" data-del="${i}" title="행 삭제" ${state.items.length <= 1 ? 'disabled' : ''}>✕</button></td>`;
       tr.innerHTML = html;
       body.appendChild(tr);
     });
+    updatePriceCells();
     renderItemsFoot();
+  }
+
+  // 입력한 단가 > 자동 단가. 입력이 비어 있으면 자동 단가(없으면 0)로 공급액을 계산한다.
+  function effectivePrice(it, i) {
+    const typed = parseInt0(it.unitPrice).value;
+    if (typed != null) return typed;
+    const q = state.quotes[i];
+    return q && q.status === 'auto' ? q.price : 0;
+  }
+
+  // 단가 칸: 비어 있으면 placeholder 로 자동 단가를 보여 주고, 아래 작은 글씨로 상태를 알린다.
+  function updatePriceCells() {
+    const body = $('itemsBody');
+    state.items.forEach((it, i) => {
+      const tr = body.children[i];
+      const inp = tr && tr.querySelector('[data-k="unitPrice"]');
+      if (!inp) return;
+      const note = inp.parentElement.querySelector('.price-note');
+      const q = itemIsEmpty(it) ? null : state.quotes[i];
+      const typed = parseInt0(it.unitPrice).value;
+      inp.classList.toggle('price-auto', !!q && q.status === 'auto' && typed == null);
+      let text = '', kind = '', placeholder = '';
+      if (q && q.status === 'auto') {
+        placeholder = q.price.toLocaleString();
+        if (typed == null) { text = '자동 단가'; kind = 'auto'; }
+        else if (typed !== q.price) { text = `수정됨 (자동 ${q.price.toLocaleString()})`; kind = 'edited'; }
+        else { text = '자동 단가와 같음'; kind = 'auto'; }
+      } else if (q) {
+        placeholder = '직접 입력';
+        if (typed == null) { text = '직접 입력 필요'; kind = 'manual'; }
+        inp.title = q.reason;
+      }
+      if (!q || q.status === 'auto') inp.title = '';
+      inp.placeholder = placeholder;
+      if (note) { note.textContent = text; note.className = 'price-note ' + kind; }
+    });
   }
 
   function renderItemsFoot() {
@@ -312,7 +351,7 @@
       else if (['mono', 'insert', 'color', 'pages'].includes(c.key)) v = items.reduce((s, it) => s + (parseInt0(it[c.key]).value || 0), 0);
       else if (c.key === 'pagesCalc') v = items.reduce((s, it) => s + pageTotal(it), 0);
       else if (c.key === 'unitPrice') {
-        v = '공급액 ' + items.reduce((s, it) => s + itemQty(it) * (parseInt0(it.unitPrice).value || 0), 0).toLocaleString();
+        v = '공급액 ' + items.reduce((s, it, i) => s + itemQty(it) * effectivePrice(it, i), 0).toLocaleString();
       }
       cells += `<td>${esc(typeof v === 'number' ? v.toLocaleString() : v)}</td>`;
     }
@@ -342,6 +381,7 @@
       if (!it) return;
       it[inp.dataset.k] = inp.value;
       state.serverIssues = null;
+      updatePriceCells();
       updateItemsDerived();
       if (inp.dataset.k === 'name') renderDistHead();
       scheduleValidate();
@@ -351,6 +391,7 @@
       if (!btn || btn.disabled) return;
       const i = Number(btn.dataset.del);
       const removed = state.items.splice(i, 1)[0];
+      state.quotes.splice(i, 1);
       for (const d of state.distribution) delete d.qtys[removed.id];
       renderItems();
       renderDist();
@@ -518,6 +559,7 @@
     $('multiName').value = state.multiName;
     $('jobNo').value = state.jobNo;
     validateAndRender();
+    scheduleQuote();
   }
 
   // ───────────── 검증 (서버 validation.py 와 동일 규칙) ─────────────
@@ -550,10 +592,12 @@
         err('ITEM_NAME_REQUIRED', `items[${i}].name`, `${i + 1}번 품목의 ${bd ? '제품명' : '교재명'}을 입력해 주세요.`);
       }
       const nums = {};
+      let priceBad = false;
       for (const [k, pk] of [['qty', 'qty'], ['mono', 'mono'], ['insert', 'insert'], ['color', 'color'], ['pages', 'pages'], ['unitPrice', 'unit_price']]) {
         if (k === 'qty' && multi) { nums.qty = itemQty(it); continue; }
         const p = parseInt0(it[k]);
         if (!p.ok) {
+          if (pk === 'unit_price') priceBad = true;
           err(pk === 'unit_price' ? 'PRICE_INVALID' : 'ITEM_NUM_INVALID', `items[${i}].${pk}`,
               `${i + 1}번 품목의 ${ITEM_NUM_LABELS[pk]}은(는) 0 이상의 정수여야 합니다.`);
         }
@@ -564,6 +608,11 @@
       if (!bd && hasContent && pages === 0) warn('ITEM_PAGES_ZERO', `items[${i}].pages`, `${i + 1}번 품목의 페이지합계가 0 입니다.`);
       const others = !!it.name.trim() || [nums.mono, nums.insert, nums.color, nums.unitPrice].some(v => v) || (bd && pages);
       if (!nums.qty && others) warn('ITEM_QTY_EMPTY', `items[${i}].qty`, `${i + 1}번 품목의 발주수량이 비어 있거나 0 입니다.`);
+      // 자동 단가가 없는 품목은 단가를 직접 입력해야 한다 (자동 단가 여부는 서버 응답 state.quotes 기준)
+      const q = state.quotes[i];
+      if (nums.qty && nums.unitPrice == null && !priceBad && q && q.status === 'manual') {
+        err('PRICE_REQUIRED', `items[${i}].unit_price`, `${i + 1}번 품목: ${q.reason}`);
+      }
     });
     if (kept.length === 0) err('NO_ITEMS', 'items', '품목을 1개 이상 입력해 주세요.');
 
@@ -635,7 +684,27 @@
     renderIssues(issues);
   }
 
-  const scheduleValidate = debounce(validateAndRender, 150);
+  // ───────────── 자동 단가 조회 ─────────────
+  let quoteSeq = 0;
+  async function fetchQuotes() {
+    const seq = ++quoteSeq;
+    let items = [];
+    try {
+      const res = await postJson('/api/order-form/price-quote', { order: buildPayload() });
+      if (!res.ok) return;
+      items = (await res.json()).items || [];
+    } catch (e) {
+      return;   // 서버가 응답하지 않으면 자동 단가 없이 두고, 생성 시 서버 검증이 판단한다
+    }
+    if (seq !== quoteSeq) return;   // 더 최근 입력의 응답이 있음
+    state.quotes = items;
+    updatePriceCells();
+    renderItemsFoot();
+    validateAndRender();
+  }
+  const scheduleQuote = debounce(fetchQuotes, 300);
+
+  const scheduleValidate = debounce(() => { validateAndRender(); scheduleQuote(); }, 150);
 
   // ───────────── 생성 ─────────────
   function buildPayload() {
