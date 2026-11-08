@@ -950,6 +950,12 @@ header {
   background: var(--warning-soft);
 }
 
+.data-table th.dist-corner { text-align: left; background: var(--primary-soft); color: var(--primary); }
+.data-table th.dist-group { background: var(--primary-soft); color: var(--primary); }
+.data-table th.dist-book { color: var(--text-strong); font-size: 13px; min-width: 110px; }
+.data-table th.dist-book small { display: block; font-weight: 500; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.dist-missing { color: var(--text-faint); font-weight: 500; }
+
 .table-actions {
   display: flex;
   gap: 8px;

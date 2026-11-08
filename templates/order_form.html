@@ -50,7 +50,7 @@
           </div>
           <div class="field" id="multiNameField" style="display:none;">
             <label for="multiName">다중 발주명 (파일명에 사용)</label>
-            <input id="multiName" type="text" placeholder="예: 평촌분당">
+            <input id="multiName" type="text" placeholder="최선전분원">
           </div>
           <div class="field">
             <label for="jobNo">작업번호</label>
@@ -91,7 +91,8 @@
       <!-- 5. 다중 분배표 -->
       <section class="banding-section" id="distSection" style="display:none;">
         <p class="section-title">학원별 분배표</p>
-        <p class="hint" style="margin:-8px 0 12px;">각 학원이 받을 수량을 입력하면 품목의 발주수량이 합계로 자동 계산됩니다.</p>
+        <p class="hint" style="margin:-8px 0 4px;">가로는 위 품목 표의 교재, 세로는 납품할 학원입니다. 각 칸에 그 학원이 받을 수량을 입력하면 학원마다 납품서가 한 장씩 만들어지고, 교재별 발주수량은 합계로 자동 계산됩니다.</p>
+        <p class="hint" style="margin:0 0 12px;">예) 교재 "테스트1" 1,000부 → 평촌캠퍼스 700 + 분당캠퍼스 300</p>
         <div class="table-wrap" style="margin-bottom:0;">
           <table class="data-table" id="distTable">
             <thead id="distHead"></thead>

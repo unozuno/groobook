@@ -368,9 +368,24 @@
   }
 
   // ───────────── 렌더링: 분배표 ─────────────
+  const CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+  const bookNo = i => CIRCLED[i] || `${i + 1}.`;
+
   function renderDistHead() {
-    const ths = state.items.map((it, i) => `<th title="${esc(it.name)}">${esc(it.name || `품목 ${i + 1}`)}</th>`).join('');
-    $('distHead').innerHTML = `<tr><th style="min-width:160px;">학원</th>${ths}<th>소계</th><th></th></tr>`;
+    const n = state.items.length;
+    const books = state.items.map((it, i) => {
+      const name = it.name.trim();
+      const label = name ? esc(name) : '<span class="dist-missing">(교재명 미입력)</span>';
+      return `<th class="dist-book" title="${esc(name)}">${bookNo(i)} ${label}<small>발주 ${itemQty(it).toLocaleString()}부</small></th>`;
+    }).join('');
+    $('distHead').innerHTML = `
+      <tr>
+        <th class="dist-corner" rowspan="2" style="min-width:160px;">학원 ↓ / 교재 →</th>
+        <th class="dist-group" colspan="${n}">교재 (위 품목 표에서 입력한 교재명)</th>
+        <th rowspan="2">소계</th>
+        <th rowspan="2"></th>
+      </tr>
+      <tr>${books}</tr>`;
   }
 
   function renderDist() {
@@ -412,6 +427,7 @@
       if (sub) sub.value = distRowTotal(d);
     });
     renderDistFoot();
+    renderDistHead();
     updateItemsDerived();
   }
 
