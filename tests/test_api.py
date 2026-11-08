@@ -22,6 +22,20 @@ def _filename(res) -> str:
     return unquote(cd.split("''", 1)[1])
 
 
+@pytest.mark.parametrize("path, active", [("/order-form", "공통발주서"), ("/order-settings", "발주서 설정")])
+def test_pages_render(client, path, active):
+    res = client.get(path)
+    assert res.status_code == 200
+    assert active in res.text
+    assert "/static/js/order_common.js" in res.text
+    assert 'class="nav-item active"' in res.text
+
+
+def test_home_has_cards(client):
+    html = client.get("/").text
+    assert 'href="/order-form"' in html and 'href="/order-settings"' in html
+
+
 def test_get_settings_with_meta(client):
     res = client.get("/api/order-settings")
     assert res.status_code == 200

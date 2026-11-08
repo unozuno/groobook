@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>공통발주서 - 그루북</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  {% set active = 'order_form' %}
+  <div class="app">
+  {% include "_sidebar.html" %}
+  <div class="content">
+  <div class="container container-wide">
+    <header style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <h1 class="logo">공통발주서</h1>
+      <div class="page-actions">
+        <a href="/order-settings" class="btn-small">⚙ 발주서 설정</a>
+      </div>
+    </header>
+    <main>
+      <!-- 1. 기본 정보 -->
+      <section class="banding-section">
+        <p class="section-title">기본 정보</p>
+        <div class="form-grid">
+          <div class="field">
+            <label for="typeInput">제작 종류</label>
+            <input id="typeInput" type="text" placeholder="종류 선택 또는 입력">
+            <p class="hint" id="typeHint" style="display:none;"></p>
+          </div>
+          <div class="field" id="orderTypeField">
+            <span class="field-label">발주 유형</span>
+            <div class="radio-group">
+              <label><input type="radio" name="orderType" value="single" checked> 단일</label>
+              <label><input type="radio" name="orderType" value="multi"> 다중</label>
+            </div>
+          </div>
+          <div class="field" id="blankTypeNameField" style="display:none;">
+            <label for="blankTypeName">종류명 (제목·파일명에 사용)</label>
+            <input id="blankTypeName" type="text" placeholder="예: 특수 교재">
+          </div>
+          <div class="field" id="receivedDateField">
+            <label for="receivedDate">접수일자</label>
+            <input id="receivedDate" type="date">
+          </div>
+          <div class="field">
+            <label for="dueDate" id="dueDateLabel">납기일자</label>
+            <input id="dueDate" type="date">
+          </div>
+          <div class="field">
+            <label for="campusInput" id="campusLabel">납품학원</label>
+            <input id="campusInput" type="text" placeholder="학원 선택 또는 입력">
+          </div>
+          <div class="field" id="multiNameField" style="display:none;">
+            <label for="multiName">다중 발주명 (파일명에 사용)</label>
+            <input id="multiName" type="text" placeholder="예: 평촌분당">
+          </div>
+          <div class="field">
+            <label for="jobNo">작업번호</label>
+            <input id="jobNo" type="text" placeholder="공장에서 받은 번호 (없으면 비워 둠)">
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 제작 사양 -->
+      <section class="banding-section" id="specSection">
+        <p class="section-title">제작 사양</p>
+        <table class="spec-table"><tbody id="specBody"></tbody></table>
+      </section>
+
+      <!-- 3. 생산처 전달사항 -->
+      <section class="banding-section" id="messagesSection">
+        <p class="section-title">생산처 전달사항</p>
+        <div class="msg-checks" id="msgChecks"></div>
+        <input id="msgExtra" type="text" class="msg-input" placeholder="추가로 전달할 내용을 직접 입력"
+               style="width:100%;border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit;">
+      </section>
+
+      <!-- 4. 품목 -->
+      <section class="banding-section" id="itemsSection">
+        <p class="section-title" id="itemsTitle">품목</p>
+        <div class="table-wrap" style="margin-bottom:0;">
+          <table class="data-table" id="itemsTable">
+            <thead id="itemsHead"></thead>
+            <tbody id="itemsBody"></tbody>
+            <tfoot id="itemsFoot"></tfoot>
+          </table>
+        </div>
+        <div class="table-actions">
+          <button type="button" class="btn-small" id="addItemBtn">+ 품목 추가</button>
+        </div>
+      </section>
+
+      <!-- 5. 다중 분배표 -->
+      <section class="banding-section" id="distSection" style="display:none;">
+        <p class="section-title">학원별 분배표</p>
+        <p class="hint" style="margin:-8px 0 12px;">각 학원이 받을 수량을 입력하면 품목의 발주수량이 합계로 자동 계산됩니다.</p>
+        <div class="table-wrap" style="margin-bottom:0;">
+          <table class="data-table" id="distTable">
+            <thead id="distHead"></thead>
+            <tbody id="distBody"></tbody>
+            <tfoot id="distFoot"></tfoot>
+          </table>
+        </div>
+        <div class="table-actions">
+          <button type="button" class="btn-small" id="addDistBtn">+ 학원 추가</button>
+        </div>
+      </section>
+
+      <!-- 6. 검증 결과 -->
+      <section class="banding-section" id="issueSection">
+        <p class="section-title">검증 결과</p>
+        <ul class="issue-list" id="issueList"></ul>
+      </section>
+
+      <!-- 7. 버튼 -->
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="resetBtn">초기화</button>
+        <button type="button" class="btn-primary" id="generateBtn">발주서 생성</button>
+      </div>
+
+      <div class="download-section" id="resultSection" style="display:none;">
+        <div class="success-icon">🎉</div>
+        <p class="success-msg">엑셀 파일이 생성되어 다운로드되었습니다.</p>
+        <p class="result-filename" id="resultFilename"></p>
+        <button class="btn-secondary" id="resultCloseBtn">닫기</button>
+      </div>
+
+      <div class="error-section" id="errorSection" style="display:none;">
+        <div class="error-icon">⚠️</div>
+        <p class="error-msg" id="errorMsg"></p>
+        <button class="btn-secondary" id="errorCloseBtn">닫기</button>
+      </div>
+    </main>
+  </div>
+  </div>
+  </div>
+
+  <datalist id="dl-types"></datalist>
+  <datalist id="dl-campuses"></datalist>
+
+  <script src="/static/js/order_common.js"></script>
+  <script src="/static/js/order_form.js"></script>
+</body>
+</html>

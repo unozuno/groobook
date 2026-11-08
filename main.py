@@ -90,6 +90,16 @@ async def email_page(request: Request):
     return templates.TemplateResponse(request=request, name="email.html")
 
 
+@app.get("/order-form", response_class=HTMLResponse)
+async def order_form_page(request: Request):
+    return templates.TemplateResponse(request=request, name="order_form.html")
+
+
+@app.get("/order-settings", response_class=HTMLResponse)
+async def order_settings_page(request: Request):
+    return templates.TemplateResponse(request=request, name="order_settings.html")
+
+
 # ──────────────── 포장전표 API ────────────────
 
 @app.post("/api/process/{proc_type}")
