@@ -16,7 +16,6 @@ from openpyxl.worksheet.properties import PageSetupProperties
 from processors.order_form.models import DeliveryNote, Order
 
 # ───────── 스타일 상수 ─────────
-YELLOW = PatternFill("solid", fgColor="FFFF00")
 GREEN = PatternFill("solid", fgColor="92D050")
 _THIN = Side(style="thin")
 BOX = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
@@ -89,7 +88,7 @@ def write_order_sheet(ws, order: Order) -> None:
     # 1행 제목
     _set(ws, 1, 3, "그루북", font=F20, align=RIGHT)
     ws.merge_cells("D1:E1")
-    _set(ws, 1, 4, order.type_name or None, font=F20, fill=YELLOW)
+    _set(ws, 1, 4, order.type_name or None, font=F20)
     _set(ws, 1, 6, "제작 요청서", font=F20, align=LEFT)
 
     # 2~8행 기본 정보 + 사양
@@ -103,19 +102,19 @@ def write_order_sheet(ws, order: Order) -> None:
     _set(ws, 2, 8, order.due_date, fmt=DATE_FMT)
 
     _set(ws, 3, 2, "납품학원")
-    _set(ws, 3, 3, order.campus or None, fill=YELLOW)
+    _set(ws, 3, 3, order.campus or None)
     ws.merge_cells("I3:J3")
     _set(ws, 3, 9, _job_no_value(order.job_no), font=F20)
 
     s = order.spec
     _set(ws, 4, 2, "제본")
-    _set(ws, 4, 3, s["binding_method"] or None, fill=YELLOW)
+    _set(ws, 4, 3, s["binding_method"] or None)
     _set(ws, 4, 4, s["binding_staple"] or None)
 
     _set(ws, 5, 2, "내지")
-    _set(ws, 5, 3, s["inner_paper"] or None, fill=YELLOW)
-    _set(ws, 5, 4, s["inner_print"] or None, fill=YELLOW)
-    _set(ws, 5, 5, s["inner_size"] or None, fill=YELLOW)
+    _set(ws, 5, 3, s["inner_paper"] or None)
+    _set(ws, 5, 4, s["inner_print"] or None)
+    _set(ws, 5, 5, s["inner_size"] or None)
 
     _set(ws, 6, 2, "간지")
     _set(ws, 6, 3, s["insert_paper"] or None)
@@ -123,8 +122,8 @@ def write_order_sheet(ws, order: Order) -> None:
     _set(ws, 6, 5, s["insert_size"] or None)
 
     _set(ws, 7, 2, "표지")
-    _set(ws, 7, 3, s["cover_paper"] or None, fill=YELLOW)
-    _set(ws, 7, 4, s["cover_print"] or None, fill=YELLOW)
+    _set(ws, 7, 3, s["cover_paper"] or None)
+    _set(ws, 7, 4, s["cover_print"] or None)
     _set(ws, 7, 5, s["cover_size"] or None)
     _set(ws, 7, 6, s["cover_coating"] or None)
     _set(ws, 7, 7, s["cover_plate"] or None)
@@ -156,11 +155,11 @@ def write_order_sheet(ws, order: Order) -> None:
         _set(ws, r, COL_SCHOOL, None, border=BOX)
         _set(ws, r, COL_NAME, it.name if it and it.name else None, align=LEFT, border=BOX)
         _set(ws, r, COL_BODY_NO, f"=A{r}", border=BOX)
-        _set(ws, r, COL_QTY, it.qty if it else None, fill=YELLOW, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, COL_QTY, it.qty if it else None, border=BOX, fmt=NUM_FMT)
         _set(ws, r, COL_MONO, it.mono if it else None, border=BOX, fmt=NUM_FMT)
         _set(ws, r, COL_INSERT, it.insert if it else None, border=BOX, fmt=NUM_FMT)
         _set(ws, r, COL_COLOR, it.color if it else None, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, COL_PAGES, f"=F{r}+G{r}+H{r}", fill=YELLOW, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, COL_PAGES, f"=F{r}+G{r}+H{r}", border=BOX, fmt=NUM_FMT)
         _set(ws, r, COL_BUNDLE, None, border=BOX)
         _set(ws, r, COL_K, f"=$E{r}*F{r}", font=F8, fmt=NUM_FMT)
         _set(ws, r, COL_L, f"=$E{r}*G{r}", font=F8, fmt=NUM_FMT)

@@ -18,7 +18,9 @@ def test_single_order_layout(sample_order):
     assert wb.sheetnames == ["발주서", "납품서"]
     ws = wb["발주서"]
     assert (ws["C1"].value, ws["D1"].value, ws["F1"].value) == ("그루북", "교재", "제작 요청서")
-    assert ws["D1"].fill.fgColor.rgb.endswith("FFFF00")
+    # 입력칸 노란 배경은 쓰지 않는다 (머리글 연두색만 유지)
+    assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=1, max_row=9) for c in row)
+    assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=11, max_row=21, min_col=1, max_col=14) for c in row)
     assert ws["C2"].value == datetime(2026, 11, 8) and ws["H2"].value == datetime(2026, 11, 10)
     assert ws["C3"].value == "평촌캠퍼스" and ws["I3"].value == 2105
     assert (ws["C4"].value, ws["D4"].value) == ("무선제본", "좌철")
