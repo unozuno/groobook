@@ -1,9 +1,10 @@
+import json
 import threading
 import uuid
 from io import BytesIO
 
 from urllib.parse import quote
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi import Body, FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,6 +17,16 @@ from processors.quarterly import process_quarterly
 from processors.midterm import process_midterm
 from processors.jundeung_bill import process_jundeung_bill
 from processors.email_sender import scan_files, send_billing_emails
+from processors.order_form import settings_store
+from processors.order_form.clock import today_seoul
+from processors.order_form.fields import (
+    FIELD_GROUPS, GROUP_ORDER, ITEM_DEFAULT_KEYS, ITEM_DEFAULT_LABELS, field_meta,
+)
+from processors.order_form.models import GenerateRequest
+from processors.order_form.naming import yymmdd
+from processors.order_form.service import OrderValidationError, OrderWarningsPending, generate
+from processors.order_form.settings_models import SettingsValidationError
+from processors.order_form.verify import OrderVerifyError
 from renderer.pdf_renderer import render_pdf
 
 load_dotenv()
@@ -278,3 +289,70 @@ async def email_send(
 
     threading.Thread(target=run, daemon=True).start()
     return JSONResponse({"task_id": task_id})
+
+
+# ──────────────── 공통발주서 ────────────────
+
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _attachment(filename: str) -> dict:
+    return {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
+
+
+def _settings_meta() -> dict:
+    return {
+        "fields": field_meta(),
+        "groups": [{"name": g, "fields": FIELD_GROUPS[g]} for g in GROUP_ORDER],
+        "item_default_keys": list(ITEM_DEFAULT_KEYS),
+        "item_default_labels": ITEM_DEFAULT_LABELS,
+        "today": today_seoul().isoformat(),
+    }
+
+
+@app.get("/api/order-settings")
+async def order_settings_get():
+    return JSONResponse({"settings": settings_store.load_settings(), "meta": _settings_meta()})
+
+
+@app.put("/api/order-settings")
+async def order_settings_put(payload: dict = Body(...)):
+    """{"settings": {...}, "expected_updated_at": "..."}  (저장·가져오기 공용)"""
+    data = payload.get("settings")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=422, detail="settings 객체가 필요합니다.")
+    try:
+        saved = settings_store.save_settings(data, payload.get("expected_updated_at"))
+    except settings_store.SettingsConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except SettingsValidationError as e:
+        return JSONResponse(status_code=422, content={"detail": "설정 검증 실패", "errors": e.errors})
+    return JSONResponse({"settings": saved})
+
+
+@app.get("/api/order-settings/export")
+async def order_settings_export():
+    data = settings_store.load_settings()
+    body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    return Response(content=body, media_type="application/json",
+                    headers=_attachment(f"order_settings_{yymmdd()}.json"))
+
+
+@app.post("/api/order-settings/reset")
+async def order_settings_reset():
+    return JSONResponse({"settings": settings_store.reset_settings()})
+
+
+@app.post("/api/order-form/generate")
+async def order_form_generate(req: GenerateRequest):
+    settings = settings_store.load_settings()
+    try:
+        xlsx, filename, warnings = generate(req.order, req.force, settings)
+    except OrderValidationError as e:
+        return JSONResponse(status_code=422, content={"detail": "입력 오류", **e.result.as_dict()})
+    except OrderWarningsPending as e:
+        return JSONResponse(status_code=409, content={"detail": "확인이 필요한 경고가 있습니다.",
+                                                      "warnings": e.result.as_dict()["warnings"]})
+    except OrderVerifyError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return Response(content=xlsx, media_type=XLSX_MEDIA_TYPE, headers=_attachment(filename))
