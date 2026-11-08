@@ -1,7 +1,6 @@
 import threading
 import uuid
 from io import BytesIO
-import os
 
 from urllib.parse import quote
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
@@ -30,11 +29,6 @@ tasks: dict[str, dict] = {}
 
 # 이메일 스캔 임시 저장소
 email_scans: dict[str, dict] = {}
-
-# ──────────────── 인증 설정 ────────────────
-
-AUTH_CODE = os.getenv("AUTH_CODE", "")
-
 
 # ──────────────── 페이지 라우트 ────────────────
 
@@ -83,16 +77,6 @@ async def jundeung_bill_page(request: Request):
 @app.get("/email", response_class=HTMLResponse)
 async def email_page(request: Request):
     return templates.TemplateResponse(request=request, name="email.html")
-
-
-# ──────────────── 인증 API ────────────────
-
-@app.post("/api/auth/verify")
-async def verify_auth(code: str = Form(...)):
-    """메일 발송 기능 인증코드 검증"""
-    if code == AUTH_CODE:
-        return JSONResponse({"ok": True})
-    return JSONResponse({"ok": False}, status_code=401)
 
 
 # ──────────────── 포장전표 API ────────────────

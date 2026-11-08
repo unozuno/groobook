@@ -17,28 +17,8 @@
     </header>
     <main>
 
-      <!-- Step 0: 인증 -->
-      <div id="stepAuth">
-        <div class="auth-box">
-          <h2>인증 필요</h2>
-          <p class="auth-desc">메일 발송 기능은 인증코드가 필요합니다.</p>
-          <input
-            type="password"
-            id="authCode"
-            class="auth-input"
-            placeholder="인증코드 입력"
-            onkeypress="if(event.key==='Enter') submitAuth()"
-          />
-          <button
-            class="auth-submit"
-            onclick="submitAuth()"
-          >확인</button>
-          <p id="authError" class="auth-error" style="display:none;">인증코드가 올바르지 않습니다.</p>
-        </div>
-      </div>
-
       <!-- Step 1: 파일 업로드 + 스캔 -->
-      <div id="stepScan" style="display:none;">
+      <div id="stepScan">
         <div class="upload-area" id="uploadArea">
           <input type="file" id="fileInput" accept=".xlsx,.xlsm" multiple hidden>
           <div class="upload-content" id="uploadContent">
@@ -152,40 +132,11 @@
   </div>
 
   <script>
-    let authenticated = false;
     let selectedFiles = [];
     let scanId = null;
     let pollTimer = null;
     let previewRows = [];
     let pendingAdditionalMsg = '';
-
-    // 인증코드 제출
-    async function submitAuth() {
-      const code = document.getElementById('authCode').value.trim();
-      if (!code) return;
-
-      try {
-        const res = await fetch('/api/auth/verify', {
-          method: 'POST',
-          body: new URLSearchParams({ code }),
-        });
-
-        if (res.ok) {
-          authenticated = true;
-          document.getElementById('stepAuth').style.display = 'none';
-          document.getElementById('stepScan').style.display = '';
-          document.getElementById('authCode').value = '';
-        } else {
-          document.getElementById('authError').style.display = '';
-          document.getElementById('authCode').value = '';
-          setTimeout(() => {
-            document.getElementById('authError').style.display = 'none';
-          }, 3000);
-        }
-      } catch (err) {
-        console.error('Auth error:', err);
-      }
-    }
 
     // 업로드 영역 클릭
     document.getElementById('uploadArea').addEventListener('click', () => {
