@@ -20,19 +20,63 @@ def _png_bytes() -> bytes:
     return buf.getvalue()
 
 
-def make_invoice(path: Path, existing_sheets=("1008내신블랭크",)) -> Path:
-    """견적서(이미지·병합·수식) + 기존 납품서 시트들."""
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "견적서"
+ESTIMATE_HEADER_ROW, ESTIMATE_FIRST, ESTIMATE_LAST = 12, 13, 22
+ITEM_MERGES = [("B", "C"), ("D", "E"), ("G", "H"), ("I", "J"), ("K", "M"), ("N", "O")]
+
+
+def build_estimate(ws, filled: int = 0, existing_sheets=()) -> None:
+    """참조1 견적서와 같은 모양: 12행 머리글, 13~22행 품목 줄(병합), 23행 구분 병합줄,
+    24~26 제작사양, 28~30 합계 수식, 31~35 안내문, 인쇄영역 A1:O35, 이미지 1개."""
+    thin = Side(style="thin")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
     ws["B1"] = "견  적  서"
     ws["B1"].font = Font(size=20, bold=True)
     ws.merge_cells("B1:F1")
     ws["D4"] = "최선어학원 분당캠퍼스"
-    ws["G13"] = f"='{existing_sheets[0]}'!C17" if existing_sheets else None
+    ws["D5"] = "=VLOOKUP(D4,[1]팀장!$A$2:$D$30,2,0)"
+    ws["J10"] = "=SUM(G13:H22)"
+    ws["M10"] = "=K30"
+    for col, text in (("B", "품목"), ("D", "적요"), ("F", "페이지"), ("G", "수량"), ("I", "단가"), ("K", "금액"), ("N", "비고")):
+        ws[f"{col}{ESTIMATE_HEADER_ROW}"] = text
+    for r in range(ESTIMATE_HEADER_ROW, ESTIMATE_LAST + 1):
+        for a_, b_ in ITEM_MERGES:
+            ws.merge_cells(f"{a_}{r}:{b_}{r}")
+        for c in range(2, 16):
+            ws.cell(r, c).border = box
+        ws.row_dimensions[r].height = 22.5 if r < 15 else 20.5
+    for i, name in enumerate(existing_sheets[:filled]):
+        r = ESTIMATE_FIRST + i
+        ws[f"B{r}"], ws[f"D{r}"] = "소모품", f"기존 제품 {i + 1}"
+        ws[f"G{r}"], ws[f"K{r}"] = f"='{name}'!C17", f"='{name}'!F17"
+        ws[f"N{r}"] = "10/8 납품"
+    ws.merge_cells("B23:O23")
+    ws["D24"], ws["F24"] = "표  지", "아트지 250g"
+    ws.merge_cells("D24:E24")
+    ws.merge_cells("F24:O24")
+    ws.merge_cells("B24:C26")
+    ws["D28"] = "공 급 가"
     ws["I28"] = "=SUM(K13:M22)"
+    ws["K28"] = "=I28"
+    ws["K29"] = "=K28*0.1"
+    ws["K30"] = "=SUM(K28:M29)"
+    for r in (28, 29, 30):
+        ws.merge_cells(f"K{r}:M{r}")
+        ws.row_dimensions[r].height = 20.5
+    ws["B31"] = "* 안내문"
+    ws.merge_cells("B31:O35")
+    ws.row_dimensions[27].height = 6.75
+    ws.row_dimensions[31].height = 16.5
+    ws.print_area = "A1:O35"
     ws.column_dimensions["B"].width = 18
     ws.add_image(Image(io.BytesIO(_png_bytes())), "N6")
+
+
+def make_invoice(path: Path, existing_sheets=("1008내신블랭크",)) -> Path:
+    """견적서(참조1 모양: 이미지·병합·수식·기존 납품서 1줄) + 기존 납품서 시트들."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "견적서"
+    build_estimate(ws, filled=1, existing_sheets=list(existing_sheets))
     for name in existing_sheets:
         s = wb.create_sheet(name)
         s["A1"] = "납   품   명   세   서"

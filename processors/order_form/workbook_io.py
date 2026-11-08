@@ -134,10 +134,12 @@ def snapshot(wb) -> dict:
 
 
 def compare_snapshots(before: dict, after: dict, allowed: Optional[dict] = None,
-                      new_sheets: Optional[list] = None) -> list[str]:
+                      new_sheets: Optional[list] = None, expected: Optional[dict] = None) -> list[str]:
     """수정 전·후 스냅샷 차이를 문제 목록으로 돌려준다.
     allowed: {시트명: {셀 좌표}} — 이 셀들의 변경(값·서식)은 허용.
-    new_sheets: 끝에 새로 생겨야 하는 시트 이름 목록."""
+    new_sheets: 끝에 새로 생겨야 하는 시트 이름 목록.
+    expected: {시트명: 함수} — 수정 전 시트 스냅샷을 '의도한 변경(예: 줄 삽입)이 적용된 모습'으로 바꾸는 함수.
+              이 시트는 바뀐 모습과 비교한다 (allowed 의 셀은 여전히 비교에서 제외)."""
     allowed = allowed or {}
     new_sheets = new_sheets or []
     problems: list[str] = []
@@ -149,6 +151,8 @@ def compare_snapshots(before: dict, after: dict, allowed: Optional[dict] = None,
         problems.append(f"외부 링크 개수가 달라졌습니다 ({before['external_links']} → {after['external_links']})")
 
     for title, b in before["sheets"].items():
+        if title in (expected or {}):
+            b = expected[title](b)
         a = after["sheets"].get(title)
         if a is None:
             problems.append(f"시트 '{title}' 이(가) 사라졌습니다")
@@ -173,7 +177,7 @@ def compare_snapshots(before: dict, after: dict, allowed: Optional[dict] = None,
 # ───────── 안전 저장 ─────────
 
 def safe_save(wb, path: Path, before: dict, allowed: Optional[dict] = None,
-              new_sheets: Optional[list] = None) -> Path:
+              new_sheets: Optional[list] = None, expected: Optional[dict] = None) -> Path:
     """검증을 통과했을 때만 원본을 교체한다. 백업 파일 경로를 돌려준다."""
     check_writable(path)
     backup = backup_file(path)
@@ -183,7 +187,7 @@ def safe_save(wb, path: Path, before: dict, allowed: Optional[dict] = None,
         wb.save(tmp)
         reloaded = open_workbook(tmp)
         try:
-            problems = compare_snapshots(before, snapshot(reloaded), allowed, new_sheets)
+            problems = compare_snapshots(before, snapshot(reloaded), allowed, new_sheets, expected)
         finally:
             reloaded.close()
         if problems:

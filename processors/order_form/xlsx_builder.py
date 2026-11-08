@@ -77,6 +77,11 @@ def item_row_count(n_items: int) -> int:
     return max(MIN_ITEM_ROWS, n_items)
 
 
+def delivery_total_row(n_lines: int) -> int:
+    """납품서 시트에서 합계 행의 번호 (수량 C열, 공급액 F열)."""
+    return DELIV_FIRST_ITEM_ROW + item_row_count(n_lines)
+
+
 # ───────── 발주서 ─────────
 
 def write_order_sheet(ws, order: Order) -> None:
