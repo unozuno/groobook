@@ -347,6 +347,7 @@
   // ───────────── 기타 ─────────────
   function renderMisc() {
     $('multiLabel').value = state.settings.multi_label;
+    $('desktopDir').value = state.settings.desktop_dir || '';
   }
 
   // ───────────── 탭 ─────────────
@@ -479,6 +480,7 @@
       markDirty(); renderTypeList(); renderTypeEditor();
     });
     $('multiLabel').addEventListener('input', e => { state.settings.multi_label = e.target.value; markDirty(); });
+    $('desktopDir').addEventListener('input', e => { state.settings.desktop_dir = e.target.value; markDirty(); });
     window.addEventListener('beforeunload', e => {
       if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
     });

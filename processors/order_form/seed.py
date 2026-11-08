@@ -254,6 +254,7 @@ def build_seed_settings() -> dict:
         "schema_version": SCHEMA_VERSION,
         "updated_at": None,
         "multi_label": DEFAULT_MULTI_LABEL,
+        "desktop_dir": "",
         "messages": list(DEFAULT_MESSAGES),
         "types": SEED_TYPES,
         "rules": SEED_RULES,

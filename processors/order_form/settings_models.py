@@ -130,10 +130,20 @@ class OrderSettings(BaseModel):
     schema_version: int = 1
     updated_at: Optional[str] = None
     multi_label: str = "다중"
+    # 청구서·마케팅팀 엑셀을 찾을 바탕화면 경로. 비우면 자동 탐색
+    desktop_dir: str = ""
     messages: list[str] = Field(default_factory=list)
     types: list[OrderType] = Field(default_factory=list)
     rules: list[Rule] = Field(default_factory=list)
     address_book: list[AddressEntry] = Field(default_factory=list)
+
+    @field_validator("desktop_dir")
+    @classmethod
+    def _desktop_dir(cls, v):
+        v = (v or "").strip()
+        if "\x00" in v:
+            raise ValueError("바탕화면 경로에 사용할 수 없는 문자가 있습니다.")
+        return v
 
     @field_validator("multi_label")
     @classmethod
