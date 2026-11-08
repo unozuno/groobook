@@ -38,6 +38,13 @@ def get_val(ws, row, col, depth=0):
     return eval_expr(ws, v[1:].strip(), depth)
 
 
+def _operand(ws, row, col, depth):
+    """사칙연산 피연산자. Excel 과 같이 완전히 빈 셀은 0 으로 본다 (계산 실패한 수식은 None)."""
+    if ws.cell(row=row, column=col).value is None:
+        return 0.0
+    return get_val(ws, row, col, depth)
+
+
 def eval_expr(ws, expr: str, depth: int):
     """수식 문자열(앞의 '=' 제외) 평가."""
     expr = expr.strip()
@@ -51,7 +58,7 @@ def eval_expr(ws, expr: str, depth: int):
         r, c = cell_ref_to_rc(parts[0])
         if r is None:
             return None
-        result = get_val(ws, r, c, depth + 1)
+        result = _operand(ws, r, c, depth + 1)
         if result is None:
             return None
         for i in range(1, len(parts) - 1, 2):
@@ -59,7 +66,7 @@ def eval_expr(ws, expr: str, depth: int):
             r, c = cell_ref_to_rc(parts[i + 1])
             if r is None:
                 return None
-            v = get_val(ws, r, c, depth + 1)
+            v = _operand(ws, r, c, depth + 1)
             if v is None:
                 return None
             if op == '+':
