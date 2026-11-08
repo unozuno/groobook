@@ -85,7 +85,8 @@ def _color(c) -> Optional[str]:
     if getattr(c, "type", None) == "rgb":
         return c.rgb
     if getattr(c, "type", None) == "theme":
-        return f"theme{c.theme}/{c.tint}"
+        # tint 는 저장 시 부동소수점 표기 끝자리가 달라질 수 있어 반올림해서 비교한다
+        return f"theme{c.theme}/{round(c.tint or 0, 6)}"
     return str(getattr(c, "indexed", None))
 
 
@@ -96,7 +97,7 @@ def _cell_sig(cell) -> tuple:
         cell.number_format,
         (f.name, f.sz, f.b, f.i, _color(f.color)),
         (fl.fill_type, _color(fl.fgColor) if fl.fill_type else None),
-        (b.left.style, b.right.style, b.top.style, b.bottom.style),
+        tuple(getattr(side, "style", None) for side in (b.left, b.right, b.top, b.bottom)),
         (a.horizontal, a.vertical, a.wrap_text),
     )
 
