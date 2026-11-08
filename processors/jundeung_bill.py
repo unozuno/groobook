@@ -3,7 +3,8 @@ import re
 from io import BytesIO
 
 import openpyxl
-from openpyxl.utils import column_index_from_string
+
+from processors.formula_eval import get_val
 
 CAMPUS_FULL = [
     "대치본원", "대치본원S관", "송파캠퍼스", "중계캠퍼스", "분당캠퍼스",
@@ -41,89 +42,8 @@ _RE_BOOK   = re.compile(rf"^({_campus_pat})(중[123])(_[0-9]+)?$")
 _RE_GICHUL = re.compile(rf"^({_campus_pat})(중[123])?기출$")
 _RE_YESANG = re.compile(rf"^({_campus_pat})(중[123]예상문제)(_[0-9]+)?$")
 
-# ──────────────── 수식 평가기 ────────────────
-
-_RE_CELL_REF = re.compile(r'^\$?([A-Za-z]+)\$?(\d+)$')
-
-
-def _cell_ref_to_rc(ref: str):
-    """'$A$1' / 'A1' → (row, col) 1-based. 실패 시 (None, None)."""
-    m = _RE_CELL_REF.match(ref.strip())
-    if not m:
-        return None, None
-    return int(m.group(2)), column_index_from_string(m.group(1).upper())
-
-
-def _get_val(ws, row, col, depth=0):
-    """셀 값을 반환. 수식이면 재귀 평가(최대 4단계). 계산 불가 시 None."""
-    if depth > 4:
-        return None
-    v = ws.cell(row=row, column=col).value
-    if isinstance(v, (int, float)):
-        return float(v)
-    if not isinstance(v, str) or not v.startswith('='):
-        return None
-    return _eval(ws, v[1:].strip(), depth)
-
-
-def _eval(ws, expr: str, depth: int):
-    """간단한 Excel 수식 문자열 평가 (SUM / 사칙연산 지원)."""
-    expr = expr.strip()
-
-    # ROUND(SUM(...), n) 또는 SUM(...)
-    m = re.fullmatch(r'(?:ROUND\()?SUM\(([^)]+)\)(?:,\s*-?\d+\))?', expr, re.IGNORECASE)
-    if m:
-        return _eval_sum(ws, m.group(1).strip(), depth)
-
-    # 셀 참조들의 사칙연산 체인: A1+B1, D10+E10, F10*H10, A1+B1+C1 등
-    _CELL = r'\$?[A-Za-z]+\$?\d+'
-    if re.fullmatch(rf'({_CELL})([+\-*/]({_CELL}))+', expr):
-        parts = re.split(r'([+\-*/])', expr)
-        r, c = _cell_ref_to_rc(parts[0])
-        if r is None:
-            return None
-        result = _get_val(ws, r, c, depth + 1)
-        if result is None:
-            return None
-        for i in range(1, len(parts) - 1, 2):
-            op = parts[i]
-            r, c = _cell_ref_to_rc(parts[i + 1])
-            if r is None:
-                return None
-            v = _get_val(ws, r, c, depth + 1)
-            if v is None:
-                return None
-            if op == '+':   result += v
-            elif op == '-': result -= v
-            elif op == '*': result *= v
-            elif op == '/' and v != 0: result /= v
-            else: return None
-        return result
-
-    return None
-
-
-def _eval_sum(ws, range_str: str, depth: int):
-    """SUM 인자 문자열(A1:B10 또는 A1) 평가."""
-    if ':' in range_str:
-        parts = range_str.split(':')
-        r1, c1 = _cell_ref_to_rc(parts[0])
-        r2, c2 = _cell_ref_to_rc(parts[1])
-        if None in (r1, c1, r2, c2):
-            return None
-        total = 0.0
-        for r in range(r1, r2 + 1):
-            for c in range(c1, c2 + 1):
-                v = _get_val(ws, r, c, depth + 1)
-                if v is not None:
-                    total += v
-        return total
-    else:
-        r, c = _cell_ref_to_rc(range_str)
-        return _get_val(ws, r, c, depth + 1) if r else None
-
-
-# ──────────────────────────────────────────────
+# 수식 평가기는 processors/formula_eval.py 공용 모듈 사용
+_get_val = get_val
 
 
 def parse_sheet_name(name: str) -> dict | None:
