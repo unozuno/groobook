@@ -209,7 +209,7 @@
       preview.forEach(item => {
         const tr = document.createElement('tr');
         const emailCell = item.email === '이메일 없음'
-          ? `<td class="email-missing">${item.email}</td>`
+          ? `<td class="email-missing">${item.email} <a href="/order-settings" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;">공통설정 &gt; 주소록에서 등록</a></td>`
           : `<td>${item.email}</td>`;
         tr.innerHTML = `
           <td>${item.year}</td>

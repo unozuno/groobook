@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import smtplib
@@ -7,24 +6,24 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from pathlib import Path
 from urllib.parse import quote
 
 from dotenv import load_dotenv
 
+from processors.order_form import settings_store
+from processors.order_form.desktop_paths import norm_name
+
 load_dotenv()
 
-CAMPUS_EMAILS_PATH = Path(__file__).parent.parent / "campus_emails.json"
 FILENAME_PATTERN = re.compile(
     r'(\d{4})년\s+(\d{1,2})월\s+(.+?)\s+청구서_(내신교재|소모품(?:\(일반\)|\(교재\))?)(?:\.xlsx?m?)?'
 )
 
 
 def load_campus_emails() -> dict:
-    if not CAMPUS_EMAILS_PATH.exists():
-        return {}
-    with open(CAMPUS_EMAILS_PATH, encoding="utf-8") as f:
-        return json.load(f)
+    """공통설정 주소록의 이메일을 {정규화한 학원명: 메일} 로 돌려준다 (이메일이 빈 학원은 제외)."""
+    book = settings_store.load_settings()["address_book"]
+    return {norm_name(a["name"]): a["email"] for a in book if a.get("email")}
 
 
 def parse_filename(filename: str):
@@ -57,7 +56,7 @@ def scan_files(files: list[dict]) -> dict:
         if not parsed:
             continue
         year, month, campus, file_type = parsed
-        email = campus_emails.get(campus, "이메일 없음")
+        email = campus_emails.get(norm_name(campus), "이메일 없음")
         key = (year, month, campus)
         groups[key].append({
             "filename": f["filename"],
