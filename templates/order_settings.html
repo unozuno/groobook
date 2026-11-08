@@ -80,9 +80,11 @@
       <section id="tab-prices" class="tab-pane" style="display:none;">
         <div class="banding-section">
           <p class="section-title">단가표 <span class="hint" style="display:inline;margin-left:8px;" id="priceCount"></span></p>
-          <p class="hint" style="margin:0 0 10px;">
-            위에서부터 <b>조건이 모두 맞는 첫 줄</b>의 단가가 납품서에 자동 입력됩니다. 조건 칸을 비우면 '아무 값이나', 쉼표(,)로 구분하면 '그중 하나'입니다.
-            수량은 <b>총 발주수량</b>, 페이지는 <b>페이지합계</b> 기준이며, 방식이 '직접 입력'이면 발주서 작성 시 단가를 직접 입력해야 합니다.
+          <p class="hint" style="margin:0 0 10px;line-height:1.7;">
+            조건에 맞는 줄의 단가가 납품서에 자동으로 들어갑니다. 위쪽 줄부터 차례로 보고, <b>처음 맞는 줄</b>을 사용합니다.<br>
+            · 조건 칸을 비우면 "무엇이든 해당", 쉼표(,)로 여러 개 적으면 "그중 하나면 해당"입니다.<br>
+            · 수량은 발주서의 총 발주수량 기준입니다(다중 발주는 학원별 수량의 합계).<br>
+            · 방식을 "직접 입력"으로 두면 발주서에서 단가를 직접 적어야 합니다.
           </p>
           <div class="field" style="max-width:240px;margin-bottom:10px;">
             <label for="priceType">제작 종류</label>

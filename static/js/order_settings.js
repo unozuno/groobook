@@ -347,7 +347,7 @@
 
   // ───────────── 단가표 ─────────────
   const PRICE_COND_FIELDS = ['binding_method', 'inner_paper', 'inner_print', 'inner_size', 'cover_paper', 'cover_print', 'cover_size'];
-  const PRICE_KINDS = { manual: '직접 입력', fixed: '고정 금액', per_page: '페이지 × 단가 + 기본액' };
+  const PRICE_KINDS = { manual: '직접 입력', fixed: '고정 금액', per_page: '페이지당 금액 × 페이지 + 기본액' };
 
   const priceKind = r => (r.price ? r.price.kind : 'manual');
   const numOrNull = v => (String(v).trim() === '' ? null : Number(String(v).replace(/,/g, '')));
@@ -367,8 +367,11 @@
       const m = state.meta.fields.find(x => x.id === f);
       return `<th style="min-width:130px;">${esc(m ? `${m.group} ${m.label}` : f)}</th>`;
     }).join('');
-    $('priceHead').innerHTML = `<tr><th>#</th>${heads}<th style="min-width:110px;">수량(총 발주수량)</th><th style="min-width:60px;">페이지</th><th style="min-width:150px;">방식</th><th style="min-width:90px;">금액 / 페이지당</th><th style="min-width:80px;">기본액</th><th></th></tr>`;
+    $('priceHead').innerHTML = `<tr><th>#</th>${heads}<th style="min-width:110px;">수량(총 발주수량)</th><th>페이지</th><th style="min-width:150px;">방식</th><th style="min-width:90px;">금액 / 페이지당</th><th style="min-width:80px;">기본액</th><th></th></tr>`;
     const rules = priceRulesOfType();
+    // 페이지 조건은 안내문·빙고판처럼 실제로 쓰는 종류에서만 보여 준다
+    const showPages = rules.some(r => r.pages != null);
+    $('priceHead').innerHTML = $('priceHead').innerHTML.replace(/<th[^>]*>페이지<\/th>/, showPages ? '<th style="min-width:70px;">페이지 수<br><small>(정확히 일치)</small></th>' : '');
     $('priceBody').innerHTML = rules.length ? rules.map((r, i) => {
       const kind = priceKind(r);
       const conds = PRICE_COND_FIELDS.map(f => `<td><input type="text" data-pc="${f}" value="${esc((r.when[f] || []).join(', '))}"></td>`).join('');
@@ -378,17 +381,17 @@
         <td class="idx">${i + 1}</td>${conds}
         <td style="white-space:nowrap;"><input type="text" class="num" style="width:56px;" data-pf="qty_min" value="${numVal(r.qty_min)}" inputmode="numeric" placeholder="하한"> ~
           <input type="text" class="num" style="width:56px;" data-pf="qty_max" value="${numVal(r.qty_max)}" inputmode="numeric" placeholder="상한"></td>
-        <td><input type="text" class="num" data-pf="pages" value="${numVal(r.pages)}" inputmode="numeric"></td>
+        ${showPages ? `<td><input type="text" class="num" data-pf="pages" value="${numVal(r.pages)}" inputmode="numeric"></td>` : ''}
         <td><select data-pkind="1">${Object.entries(PRICE_KINDS).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
         <td><input type="text" class="num" data-pp="${kind === 'fixed' ? 'amount' : 'rate'}" value="${numVal(amount)}" inputmode="numeric" ${kind === 'manual' ? 'disabled' : ''}></td>
         <td><input type="text" class="num" data-pp="base" value="${numVal(base)}" inputmode="numeric" ${kind === 'per_page' ? '' : 'disabled'}></td>
-        <td class="act" style="white-space:nowrap;width:128px;">
+        <td class="act" style="white-space:nowrap;width:170px;">
           <button type="button" class="icon-btn" data-pact="up" ${i === 0 ? 'disabled' : ''}>▲</button>
           <button type="button" class="icon-btn" data-pact="down" ${i === rules.length - 1 ? 'disabled' : ''}>▼</button>
-          <button type="button" class="icon-btn" data-pact="copy" title="복제">⧉</button>
+          <button type="button" class="icon-btn" data-pact="copy" title="이 줄을 그대로 복사해 아래에 추가">복제</button>
           <button type="button" class="icon-btn danger" data-pact="del" title="삭제">✕</button>
         </td></tr>`;
-    }).join('') : '<tr><td colspan="13" class="hint" style="text-align:center;padding:14px;">이 제작 종류에는 단가 줄이 없습니다. 단가는 발주서 작성 시 직접 입력해야 합니다.</td></tr>';
+    }).join('') : '<tr><td colspan="12" class="hint" style="text-align:center;padding:14px;">이 제작 종류에는 단가 줄이 없습니다. 단가는 발주서 작성 시 직접 입력해야 합니다.</td></tr>';
   }
 
   function bindPrices() {

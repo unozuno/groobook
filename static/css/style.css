@@ -1230,5 +1230,5 @@ header {
 /* 단가 칸: 자동 단가 안내 */
 .price-note { display: block; min-height: 14px; margin-top: 2px; font-size: 11px; line-height: 1.2; color: #6b7280; }
 .price-note.manual { color: #b45309; font-weight: 600; }
-.price-note.edited { color: #2563eb; }
+.price-note.edited { color: #dc2626; font-weight: 700; }
 .data-table input.price-auto::placeholder { color: #374151; opacity: 1; }
