@@ -182,6 +182,22 @@ _NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _NS_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 
+def load_cached_numbers(path: Path) -> dict:
+    """원본 파일에 저장돼 있는 계산값 중 숫자만 {시트명: {좌표: 숫자}} 로 읽는다 (읽을 수 없으면 빈 값)."""
+    try:
+        wb = load_workbook(path, data_only=True)
+    except Exception:
+        return {}
+    try:
+        out = {}
+        for ws in wb.worksheets:
+            out[ws.title] = {c.coordinate: c.value for row in ws.iter_rows() for c in row
+                             if isinstance(c.value, (int, float)) and not isinstance(c.value, bool)}
+        return out
+    finally:
+        wb.close()
+
+
 def inject_cached_values(path: Path, values: dict) -> int:
     """openpyxl 은 수식 셀의 계산값(캐시)을 비워 저장한다. 엑셀은 열 때 다시 계산하지만, 다시 계산하지 않는
     프로그램(미리보기·Numbers·보호된 보기)에서는 0 이나 '-' 로 보인다. 우리가 값을 아는 수식 셀에 한해
@@ -197,19 +213,23 @@ def inject_cached_values(path: Path, values: dict) -> int:
     for sh in wb_xml.iter(f"{_NS_MAIN}sheet"):
         target = rels.get(sh.get(f"{_NS_REL}id"), "")
         sheet_files[sh.get("name")] = "xl/" + target.lstrip("/").removeprefix("xl/")
+    pattern = re.compile(r'(<c r="([A-Z]+[0-9]+)"(?: [^>]*)?>\s*<f(?: [^>]*)?>[^<]*</f>)\s*(?:<v\s*/>|<v></v>)?(\s*</c>)')
     done = 0
     for title, cells in values.items():
         name = sheet_files.get(title)
         if name not in files:
             continue
-        xml = files[name].decode("utf-8")
-        for coord, number in cells.items():
+        count = 0
+
+        def fill(m):
+            nonlocal count
+            number = cells.get(m.group(2))
             if isinstance(number, bool) or not isinstance(number, (int, float)):
-                continue
-            pattern = re.compile(r'(<c r="%s"(?: [^>]*)?>\s*<f(?: [^>]*)?>[^<]*</f>)\s*(?:<v\s*/>|<v></v>)?(\s*</c>)' % re.escape(coord))
-            xml, n = pattern.subn(lambda m: f"{m.group(1)}<v>{number!r}</v>{m.group(2)}", xml, count=1)
-            done += n
-        files[name] = xml.encode("utf-8")
+                return m.group(0)
+            count += 1
+            return f"{m.group(1)}<v>{number!r}</v>{m.group(3)}"
+        files[name] = pattern.sub(fill, files[name].decode("utf-8")).encode("utf-8")
+        done += count
     tmp = path.with_name(path.name + ".cache")
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
         for fname, data in files.items():

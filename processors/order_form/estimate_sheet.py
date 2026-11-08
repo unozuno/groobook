@@ -177,7 +177,9 @@ def write_item_row(ws, layout: EstimateLayout, row: int, summary: str, sheet: st
     ws.cell(row, c["적요"]).value = summary
     ws.cell(row, c["수량"]).value = f"={quote_sheet(sheet)}!C{total_row}"
     ws.cell(row, c["금액"]).value = f"={quote_sheet(sheet)}!F{total_row}"
-    ws.cell(row, c["비고"]).value = f"{month}/{day} 납품"
+    # 견적서 틀의 비고 칸은 표시 서식이 `@ "납품"` 이라 값에는 '월/일'만 넣는다 (서식이 없는 틀이면 문구까지 넣는다)
+    note = ws.cell(row, c["비고"])
+    note.value = f"{month}/{day}" if "납품" in re.sub(r'["\\ ]', "", note.number_format or "") else f"{month}/{day} 납품"
 
 
 # ───────── 저장 검증용: 줄 삽입 후 기대 스냅샷 ─────────

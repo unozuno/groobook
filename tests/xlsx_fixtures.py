@@ -20,6 +20,7 @@ def _png_bytes() -> bytes:
     return buf.getvalue()
 
 
+NOTE_FORMAT = '@\\ "납""품"'      # 참조1 견적서의 비고 칸 서식
 ESTIMATE_HEADER_ROW, ESTIMATE_FIRST, ESTIMATE_LAST = 12, 13, 22
 ITEM_MERGES = [("B", "C"), ("D", "E"), ("G", "H"), ("I", "J"), ("K", "M"), ("N", "O")]
 
@@ -44,11 +45,12 @@ def build_estimate(ws, filled: int = 0, existing_sheets=()) -> None:
         for c in range(2, 16):
             ws.cell(r, c).border = box
         ws.row_dimensions[r].height = 22.5 if r < 15 else 20.5
+        ws[f"N{r}"].number_format = NOTE_FORMAT        # 참조1 과 같이 비고는 '월/일' 만 넣고 서식이 ' 납품' 을 붙인다
     for i, name in enumerate(existing_sheets[:filled]):
         r = ESTIMATE_FIRST + i
         ws[f"B{r}"], ws[f"D{r}"] = "소모품", f"기존 제품 {i + 1}"
         ws[f"G{r}"], ws[f"K{r}"] = f"='{name}'!C17", f"='{name}'!F17"
-        ws[f"N{r}"] = "10/8 납품"
+        ws[f"N{r}"] = "10/8"
     ws.merge_cells("B23:O23")
     ws["D24"], ws["F24"] = "표  지", "아트지 250g"
     ws.merge_cells("D24:E24")

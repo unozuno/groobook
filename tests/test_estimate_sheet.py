@@ -49,7 +49,10 @@ def test_write_item_row_values_and_formulas():
     es.write_item_row(ws, lay, 13, "엘자화일 외", "1030엘자화일외(재)", 19, 10, 8)
     assert ws["B13"].value == "소모품" and ws["D13"].value == "엘자화일 외"
     assert ws["G13"].value == "='1030엘자화일외(재)'!C19" and ws["K13"].value == "='1030엘자화일외(재)'!F19"
-    assert ws["N13"].value == "10/8 납품"                       # 0 을 채우지 않음
+    assert ws["N13"].value == "10/8"                            # 0 을 채우지 않고, 서식(' 납품')이 문구를 붙인다
+    ws["N14"].number_format = "General"
+    es.write_item_row(ws, lay, 14, "x", "s", 19, 11, 28)
+    assert ws["N14"].value == "11/28 납품"                      # 서식이 없는 틀이면 문구까지 값에 넣는다
     assert ws["F13"].value is None and ws["I13"].value is None
 
 

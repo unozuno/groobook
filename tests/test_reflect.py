@@ -137,7 +137,7 @@ def test_estimate_gets_one_line_for_new_sheet(make_order, desk):
     assert items[0].status == "done" and "견적서 14행에 한 줄을 추가" in items[0].message
     ws = est(desk)
     assert [ws[f"{c}14"].value for c in "BDFGIKN"] == [
-        "소모품", "교재 상품권 난수", None, "='1127교재상품권난수'!C19", None, "='1127교재상품권난수'!F19", "11/27 납품"]
+        "소모품", "교재 상품권 난수", None, "='1127교재상품권난수'!C19", None, "='1127교재상품권난수'!F19", "11/27"]
     assert ws["B13"].value == "소모품" and ws["D13"].value == "기존 제품 1"     # 기존 줄 그대로
     assert ws["I28"].value == "=SUM(K13:M22)" and ws["J10"].value == "=SUM(G13:H22)"   # 삽입 없음 → 수식 불변
 
@@ -157,7 +157,7 @@ def test_second_sheet_uses_next_free_line_and_date_note_has_no_zero_padding(make
     run(order_for(make_order, due_date="2026-12-03", items=[{"name": "다른 제품", "qty": "5", "unit_price": "10"}]),
         make_desktop(desk, month=12, invoice_campuses=("분당캠퍼스",), with_marketing=False), targets=("invoice",))
     ws = load_workbook(invoice_path(desk).parent.parent / "2026년 12월 매출청구서_소모품" / "2026년 12월 분당캠퍼스 청구서_소모품.xlsx")["견적서"]
-    assert ws["N14"].value == "12/3 납품" and ws["D14"].value == "다른 제품"
+    assert ws["N14"].value == "12/3" and ws["D14"].value == "다른 제품"
 
 
 def test_estimate_line_inserted_when_full(make_order, tmp_path):
@@ -368,7 +368,7 @@ def test_real_reference_files_roundtrip(make_order, tmp_path):
     inv = load_workbook(invoice_path(desk))
     assert len(inv.sheetnames) == n_sheets + 1 and inv.sheetnames[-1] == "1127교재상품권난수"
     assert len(inv["견적서"]._images) == 1 and len(inv._external_links) == n_links
-    assert inv["견적서"]["D21"].value == "교재 상품권 난수" and inv["견적서"]["N21"].value == "11/27 납품"   # 참조1 의 첫 빈 줄
+    assert inv["견적서"]["D21"].value == "교재 상품권 난수" and inv["견적서"]["N21"].value == "11/27"   # 참조1 의 첫 빈 줄
     assert inv["견적서"]["G21"].value == "='1127교재상품권난수'!C19" and inv["견적서"]["I28"].value == "=SUM(K13:M22)"
     mk = load_workbook(marketing_path(desk))["소모품출고내역"]
     assert mk["AF7"].value == "교재 상품권 난수" and mk["AG7"].value == 1000       # 분당캠퍼스 구역(AE~AJ)
