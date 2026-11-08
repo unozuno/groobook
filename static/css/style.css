@@ -176,12 +176,6 @@ header {
   letter-spacing: -0.5px;
 }
 
-.subtitle {
-  margin-top: 6px;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
 /* ── 카드 그리드 ── */
 .card-grid {
   display: grid;
