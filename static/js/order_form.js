@@ -294,7 +294,8 @@
           const ro = c.readonly ? 'readonly tabindex="-1" class="num cell-readonly"' : `class="${c.type === 'num' ? 'num' : ''}"`;
           const val = c.readonly ? itemQty(it) : esc(it[c.key]);
           const note = c.key === 'unitPrice' ? '<small class="price-note"></small>' : '';
-          html += `<td><input type="text" ${ro} data-i="${i}" data-k="${c.key}" data-path="${path}" value="${val}" ${c.type === 'num' ? 'inputmode="numeric"' : ''}>${note}</td>`;
+          const list = c.key === 'name' && isBlankDelivery() ? 'list="dl-products" autocomplete="off"' : '';   // 납품명세서 제품 목록
+          html += `<td><input type="text" ${ro} ${list} data-i="${i}" data-k="${c.key}" data-path="${path}" value="${val}" ${c.type === 'num' ? 'inputmode="numeric"' : ''}>${note}</td>`;
         }
       }
       html += `<td class="act"><button type="button" class="icon-btn danger" data-del="${i}" title="행 삭제" ${state.items.length <= 1 ? 'disabled' : ''}>✕</button></td>`;
@@ -942,6 +943,7 @@
     state.meta = data.meta;
     fillDatalist('dl-types', [...typeNames(), BLANK_ORDER_LABEL, BLANK_DELIVERY_LABEL]);
     fillDatalist('dl-campuses', campusNames());
+    fillDatalist('dl-products', [...new Set(state.settings.price_rules.filter(r => r.type_id === 'delivery').map(r => r.product))]);
     for (const f of fieldIds()) fillDatalist('dl-' + f, []);
     makeCombobox($('typeInput'), 'dl-types');
     makeCombobox($('campusInput'), 'dl-campuses');

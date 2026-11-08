@@ -355,6 +355,9 @@
   const PRICE_COND_FIELDS = ['binding_method', 'inner_paper', 'inner_print', 'inner_size', 'cover_paper', 'cover_print', 'cover_size'];
   const PRICE_KINDS = { manual: '직접 입력', fixed: '고정 금액', per_page: '페이지당 금액 × 페이지 + 기본액' };
 
+  const DELIVERY_ID = 'delivery';   // 빈 납품서(납품명세서): 제품명 + 수령자별 단가
+  const DELIVERY_LABEL = '납품명세서 (빈 납품서)';
+  const DELIVERY_KINDS = { manual: '직접 입력', fixed: '고정 금액' };
   const priceKind = r => (r.price ? r.price.kind : 'manual');
   const numOrNull = v => (String(v).trim() === '' ? null : Number(String(v).replace(/,/g, '')));
   const numVal = v => (v == null ? '' : String(v));
@@ -366,9 +369,13 @@
   function renderPrices() {
     const s = state.settings;
     const sel = $('priceType');
-    if (!s.types.some(t => t.id === state.priceTypeId)) state.priceTypeId = s.types[0]?.id ?? null;
-    sel.innerHTML = s.types.map(t => `<option value="${esc(t.id)}" ${t.id === state.priceTypeId ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    if (state.priceTypeId !== DELIVERY_ID && !s.types.some(t => t.id === state.priceTypeId)) state.priceTypeId = s.types[0]?.id ?? null;
+    sel.innerHTML = [...s.types.map(t => [t.id, t.name]), [DELIVERY_ID, DELIVERY_LABEL]]
+      .map(([id, name]) => `<option value="${esc(id)}" ${id === state.priceTypeId ? 'selected' : ''}>${esc(name)}</option>`).join('');
     $('priceCount').textContent = `전체 ${s.price_rules.length}줄`;
+    $('priceHelp').style.display = state.priceTypeId === DELIVERY_ID ? 'none' : '';
+    $('deliveryHelp').style.display = state.priceTypeId === DELIVERY_ID ? '' : 'none';
+    if (state.priceTypeId === DELIVERY_ID) { renderDeliveryPrices(); return; }
     const heads = PRICE_COND_FIELDS.map(f => {
       const m = state.meta.fields.find(x => x.id === f);
       return `<th style="min-width:130px;">${esc(m ? `${m.group} ${m.label}` : f)}</th>`;
@@ -400,6 +407,26 @@
     }).join('') : '<tr><td colspan="12" class="hint" style="text-align:center;padding:14px;">이 제작 종류에는 단가 줄이 없습니다. 단가는 발주서 작성 시 직접 입력해야 합니다.</td></tr>';
   }
 
+  function renderDeliveryPrices() {
+    $('priceHead').innerHTML = '<tr><th>#</th><th style="min-width:200px;">제품명</th><th style="min-width:260px;">수령자 (비우면 모든 학원)</th><th style="min-width:130px;">방식</th><th style="min-width:100px;">단가</th><th></th></tr>';
+    const rules = priceRulesOfType();
+    $('priceBody').innerHTML = rules.length ? rules.map((r, i) => {
+      const kind = priceKind(r);
+      return `<tr data-rid="${esc(r.id)}">
+        <td class="idx">${i + 1}</td>
+        <td><input type="text" data-pprod="1" value="${esc(r.product || '')}" placeholder="예: 대봉투"></td>
+        <td><input type="text" data-pcamp="1" value="${esc((r.campuses || []).join(', '))}" placeholder="예: 대치크레오, 하남크레오"></td>
+        <td><select data-pkind="1">${Object.entries(DELIVERY_KINDS).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+        <td><input type="text" class="num" data-pp="amount" value="${numVal(kind === 'fixed' ? r.price.amount : '')}" inputmode="numeric" ${kind === 'manual' ? 'disabled' : ''}></td>
+        <td class="act" style="white-space:nowrap;width:170px;">
+          <button type="button" class="icon-btn" data-pact="up" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="icon-btn" data-pact="down" ${i === rules.length - 1 ? 'disabled' : ''}>▼</button>
+          <button type="button" class="icon-btn" data-pact="copy" title="이 줄을 그대로 복사해 아래에 추가">복제</button>
+          <button type="button" class="icon-btn danger" data-pact="del" title="삭제">✕</button>
+        </td></tr>`;
+    }).join('') : '<tr><td colspan="6" class="hint" style="text-align:center;padding:14px;">납품명세서 단가 줄이 없습니다. 빈 납품서의 단가는 직접 입력해야 합니다.</td></tr>';
+  }
+
   function bindPrices() {
     $('priceType').addEventListener('change', e => { state.priceTypeId = e.target.value; renderPrices(); });
     const ruleOf = el => state.settings.price_rules.find(r => r.id === el.closest('tr')?.dataset.rid);
@@ -408,7 +435,11 @@
       const inp = e.target;
       const r = ruleOf(inp);
       if (!r) return;
-      if (inp.dataset.pc) {
+      if (inp.dataset.pprod) {
+        r.product = inp.value;
+      } else if (inp.dataset.pcamp) {
+        r.campuses = inp.value.split(',').map(v => v.trim()).filter(Boolean);
+      } else if (inp.dataset.pc) {
         r.when[inp.dataset.pc] = inp.value.split(',').map(v => v.trim()).filter(Boolean);
       } else if (inp.dataset.pf) {
         r[inp.dataset.pf] = numOrNull(inp.value);
@@ -457,7 +488,8 @@
       const all = state.settings.price_rules;
       let last = -1;
       all.forEach((r, i) => { if (r.type_id === state.priceTypeId) last = i; });
-      all.splice(last + 1, 0, { id: uid('pr'), type_id: state.priceTypeId, when: {}, qty_min: null, qty_max: null, pages: null, price: { kind: 'fixed', amount: null, rate: null, base: null } });
+      all.splice(last + 1, 0, { id: uid('pr'), type_id: state.priceTypeId, when: {}, qty_min: null, qty_max: null, pages: null, product: '', campuses: [],
+        price: { kind: 'fixed', amount: null, rate: null, base: null } });
       markDirty(); renderPrices();
       const rows = $('priceBody').children;
       for (const tr of rows) if (tr.dataset.rid === all[last + 1].id) { tr.querySelector('input')?.focus(); tr.scrollIntoView({ block: 'nearest' }); }
@@ -510,9 +542,10 @@
     for (const a of s.address_book) {
       if (!emailOk(a.email || '')) problems.push(`'${a.name.trim() || '(이름 없음)'}' 의 이메일 형식이 올바르지 않습니다. 학원당 메일 주소 1개만 입력할 수 있습니다.`);
     }
-    const typeName = id => (s.types.find(t => t.id === id) || {}).name || id;
+    const typeName = id => (id === DELIVERY_ID ? '납품명세서' : (s.types.find(t => t.id === id) || {}).name || id);
     s.price_rules.forEach(r => {
       if (r.qty_min != null && r.qty_max != null && r.qty_min > r.qty_max) problems.push(`단가표 · ${typeName(r.type_id)}: 수량 하한이 상한보다 큰 줄이 있습니다.`);
+      if (r.type_id === DELIVERY_ID && !(r.product || '').trim()) problems.push('단가표 · 납품명세서: 제품명이 비어 있는 줄이 있습니다.');
       if (r.price && r.price.kind === 'fixed' && r.price.amount == null) problems.push(`단가표 · ${typeName(r.type_id)}: 금액이 비어 있는 고정 단가 줄이 있습니다.`);
       if (r.price && r.price.kind === 'per_page' && r.price.rate == null) problems.push(`단가표 · ${typeName(r.type_id)}: 페이지당 금액이 비어 있는 줄이 있습니다.`);
     });
