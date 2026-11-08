@@ -9,7 +9,7 @@ import copy
 from processors.order_form.fields import FIELD_IDS, ITEM_DEFAULT_KEYS
 from processors.order_form.seed_prices import SEED_PRICE_RULES
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DEFAULT_MULTI_LABEL = "다중"
 

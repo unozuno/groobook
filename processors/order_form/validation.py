@@ -233,7 +233,7 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
             res.warn("ITEM_QTY_EMPTY", f"items[{i}].qty",
                      f"{i + 1}번 품목의 발주수량이 비어 있거나 0 입니다.")
         if it.qty and it.unit_price is None and i not in bad_price:
-            q = quote(mode, type_id, type_name, spec, it, price_rules)
+            q = quote(mode, type_id, type_name, spec, it, price_rules, campus)
             if q.status == "manual":
                 res.error("PRICE_REQUIRED", f"items[{i}].unit_price", f"{i + 1}번 품목: {q.reason}")
 
@@ -281,5 +281,5 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         distribution=distribution, deliveries=deliveries,
     )
     for note in order.deliveries:
-        note.unit_prices = fill_unit_prices(mode, type_id, type_name, spec, note.lines, price_rules)
+        note.unit_prices = fill_unit_prices(mode, type_id, type_name, spec, note.lines, price_rules, note.campus)
     return res, order

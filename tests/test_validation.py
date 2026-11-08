@@ -267,3 +267,20 @@ def test_saddle_binding_rule(settings):
     spec = type_defaults(tb)
     spec["binding_method"] = "중철제본"
     assert apply_rules(spec, tb, settings["rules"])["binding_staple"] == ""
+
+
+def test_blank_delivery_fills_auto_price_by_product_and_campus(settings):
+    req = base_request(mode="blank_delivery", campus="대치크레오", items=[
+        {"name": "비닐봉투", "qty": "10"}, {"name": "엘자화일", "qty": "5", "unit_price": "400"}, {"name": "대봉투", "qty": "1"}])
+    res, order = validate(req, settings)
+    assert res.ok, [i.message for i in res.errors]
+    assert order.deliveries[0].unit_prices == [300, 400, 200]       # 입력값이 자동 단가보다 우선
+
+
+def test_blank_delivery_blue_cell_product_requires_price(settings):
+    req = base_request(mode="blank_delivery", campus="분당캠퍼스", items=[{"name": "고3 모의고사 대봉투", "qty": "10"}])
+    res, _ = validate(req, settings)
+    assert [(i.code, i.path) for i in res.errors] == [("PRICE_REQUIRED", "items[0].unit_price")]
+    req.items[0].unit_price = "250"
+    res, order = validate(req, settings)
+    assert res.ok and order.deliveries[0].unit_prices == [250]

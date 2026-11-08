@@ -110,7 +110,7 @@ def test_seed_has_price_rules_for_every_priced_type():
     by_type = {}
     for r in s["price_rules"]:
         by_type.setdefault(r["type_id"], []).append(r)
-    ids = {t["id"] for t in s["types"]}
+    ids = {t["id"] for t in s["types"]} | {"delivery"}   # delivery = 빈 납품서(납품명세서)
     assert set(by_type) == ids                       # 상장·초대장 등은 price=None 규칙으로 존재
     assert all(r["price"] is None for r in by_type["certificate"] + by_type["invitation"])
     assert len(by_type["textbook"]) == 28
@@ -187,7 +187,7 @@ def _write_v1(s):
 
 def test_new_seed_has_empty_emails():
     s = validate_settings(build_seed_settings())
-    assert s["schema_version"] == 2 and all(a["email"] == "" for a in s["address_book"])
+    assert s["schema_version"] == 3 and all(a["email"] == "" for a in s["address_book"])
 
 
 def test_legacy_emails_fill_empty_entries_ignoring_spaces(legacy_json):
@@ -226,14 +226,14 @@ def test_legacy_file_broken_is_ignored(legacy_json, content):
 def test_missing_legacy_file_is_ignored(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_store, "LEGACY_EMAILS_PATH", tmp_path / "없음.json")
     _write_v1(_v1_settings())
-    assert settings_store.load_settings()["schema_version"] == 2
+    assert settings_store.load_settings()["schema_version"] == 3
 
 
 def test_migration_is_persisted_and_not_repeated(legacy_json):
     path = legacy_json({"대치본원": "a@test.kr"})
     _write_v1(_v1_settings())
     settings_store.load_settings()
-    assert json.loads(settings_store.settings_path().read_text(encoding="utf-8"))["schema_version"] == 2
+    assert json.loads(settings_store.settings_path().read_text(encoding="utf-8"))["schema_version"] == 3
     s = settings_store.load_settings()
     s["address_book"][0]["email"] = ""                       # 사용자가 지운 값은 json 이 다시 채우지 않는다
     settings_store.save_settings(s)
@@ -255,3 +255,51 @@ def test_email_is_trimmed_and_blank_allowed():
     s["address_book"][1]["email"] = "   "
     out = validate_settings(s)["address_book"]
     assert out[0]["email"] == "a@test.kr" and out[1]["email"] == ""
+
+
+# ───────────────────────── 납품명세서(빈 납품서) 단가 규칙 ─────────────────────────
+
+def test_seed_delivery_rules():
+    rules = [r for r in validate_settings(build_seed_settings())["price_rules"] if r["type_id"] == "delivery"]
+    assert [r["product"] for r in rules][:2] == ["대봉투", "모의고사 대봉투"]
+    elja = [r for r in rules if r["product"] == "엘자화일"]
+    assert elja[0]["campuses"] == ["대치크레오", "하남크레오", "송파크레오", "키비즈"] and elja[0]["price"]["amount"] == 500
+    assert elja[1]["campuses"] == [] and elja[1]["price"]["amount"] == 250     # 학원 한정 줄이 먼저
+    assert [r["price"] for r in rules if r["product"].startswith("고")] == [None, None]
+
+
+def test_v2_settings_get_delivery_rules_added(legacy_json):
+    legacy_json("{}")
+    s = _v1_settings()
+    s["schema_version"] = 2
+    s["price_rules"] = [r for r in build_seed_settings()["price_rules"] if r["type_id"] != "delivery"]
+    _write_v1(s)
+    rules = settings_store.load_settings()["price_rules"]
+    assert any(r["type_id"] == "delivery" for r in rules)
+    assert len([r for r in rules if r["type_id"] == "textbook"]) == 28
+
+
+def test_delivery_rules_survive_type_pruning_and_validate():
+    s = settings_store.load_settings()
+    s["types"] = [t for t in s["types"] if t["id"] != "textbook"]
+    settings_store.save_settings(s)
+    assert any(r["type_id"] == "delivery" for r in settings_store.load_settings()["price_rules"])
+
+
+@pytest.mark.parametrize("mutate, fragment", [
+    (lambda r: r.update(product="  "), "제품명이 비어"),
+    (lambda r: r.update(price={"kind": "per_page", "rate": 1}), "고정 금액"),
+])
+def test_invalid_delivery_rule_rejected(mutate, fragment):
+    s = build_seed_settings()
+    rule = next(r for r in s["price_rules"] if r["type_id"] == "delivery")
+    mutate(rule)
+    with pytest.raises(SettingsValidationError, match=fragment):
+        validate_settings(s)
+
+
+def test_product_not_allowed_on_normal_rule():
+    s = build_seed_settings()
+    s["price_rules"][0]["product"] = "대봉투"
+    with pytest.raises(SettingsValidationError, match="납품명세서 단가에만"):
+        validate_settings(s)

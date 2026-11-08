@@ -72,6 +72,6 @@ def quote_items(req: OrderRequest, settings: dict) -> list[dict | None]:
             else page_total(nums["mono"], nums["insert"], nums["color"])
         item = Item(name=it.name.strip(), qty=qty, mono=nums["mono"], insert=nums["insert"],
                     color=nums["color"], pages=pages)
-        q = quote(req.mode, type_id, type_name, spec, item, rules)
+        q = quote(req.mode, type_id, type_name, spec, item, rules, req.campus.strip())
         out.append({"status": q.status, "price": q.price, "reason": q.reason})
     return out

@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from processors.order_form.fields import FIELD_IDS
 
 
+DELIVERY_TYPE_ID = "delivery"   # 제작 종류가 아닌 예약 id: 빈 납품서(납품명세서)의 제품별 단가
+
+
 class PriceFormula(BaseModel):
     """fixed: 단가 = amount / per_page: 단가 = 페이지합계 × rate + base."""
     model_config = ConfigDict(extra="forbid")
@@ -40,6 +43,9 @@ class PriceRule(BaseModel):
     qty_max: Optional[int] = Field(default=None, ge=0)
     pages: Optional[int] = Field(default=None, ge=0)           # 페이지합계가 정확히 이 값일 때만
     price: Optional[PriceFormula] = None
+    # 빈 납품서(type_id == 'delivery') 전용: 제품명이 같고, 수령자가 campuses 중 하나(비어 있으면 모든 수령자)
+    product: str = ""
+    campuses: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check(self):
@@ -54,4 +60,14 @@ class PriceRule(BaseModel):
         self.when = cleaned
         if self.qty_min is not None and self.qty_max is not None and self.qty_min > self.qty_max:
             raise ValueError(f"단가 규칙 {self.id}: 수량 하한이 상한보다 큽니다.")
+        self.product = self.product.strip()
+        self.campuses = [c.strip() for c in self.campuses if c and c.strip()]
+        if self.type_id == DELIVERY_TYPE_ID:
+            if not self.product:
+                raise ValueError("납품명세서 단가 줄에 제품명이 비어 있습니다.")
+            if self.price is not None and self.price.kind != "fixed":
+                raise ValueError(f"납품명세서 '{self.product}' 는 고정 금액 또는 직접 입력만 쓸 수 있습니다.")
+            self.when, self.qty_min, self.qty_max, self.pages = {}, None, None, None
+        elif self.product or self.campuses:
+            raise ValueError(f"단가 규칙 {self.id}: 제품명·수령자는 납품명세서 단가에만 쓸 수 있습니다.")
         return self

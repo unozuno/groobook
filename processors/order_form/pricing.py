@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from processors.order_form.models import DeliveryLine, Item
+from processors.order_form.pricing_models import DELIVERY_TYPE_ID
 
 
 @dataclass
@@ -43,13 +44,30 @@ def _compute(price: dict, item: Item) -> int:
     return item.pages * price["rate"] + (price["base"] or 0)
 
 
+def _quote_delivery(item: Item, campus: str, rules: list[dict]) -> PriceQuote:
+    """빈 납품서: 제품명이 같고 수령자가 맞는 첫 납품명세서 규칙 (수령자가 비어 있는 규칙은 모든 수령자)."""
+    product = _norm(item.name)
+    named = [r for r in rules if r["type_id"] == DELIVERY_TYPE_ID and _norm(r.get("product", "")) == product]
+    for rule in named:
+        campuses = {_norm(c) for c in rule.get("campuses", [])}
+        if campuses and _norm(campus) not in campuses:
+            continue
+        if rule["price"] is None:
+            return PriceQuote("manual", rule_id=rule["id"], reason=f"'{item.name}' 은(는) 단가를 직접 입력해야 합니다.")
+        return PriceQuote("auto", price=_compute(rule["price"], item), rule_id=rule["id"])
+    if named:
+        return PriceQuote("manual", reason=f"'{item.name}' 은(는) 이 수령자의 단가가 없어 직접 입력해야 합니다.")
+    return PriceQuote("manual", reason="납품명세서 단가표에 없는 제품이라 단가를 직접 입력해야 합니다.")
+
+
 def quote(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str],
-          item: Item, rules: list[dict]) -> PriceQuote:
-    """한 품목의 자동 단가. item.qty 는 총 발주수량(다중이면 분배표 합계)이어야 한다."""
+          item: Item, rules: list[dict], campus: str = "") -> PriceQuote:
+    """한 품목의 자동 단가. item.qty 는 총 발주수량(다중이면 분배표 합계)이어야 한다.
+    campus 는 빈 납품서의 수령자(학원별로 단가가 다른 제품용)."""
     if mode == "blank_order":
         return PriceQuote("manual", reason="빈 발주서는 단가를 직접 입력해야 합니다.")
     if mode == "blank_delivery":
-        return PriceQuote("manual", reason="빈 납품서는 단가를 직접 입력해야 합니다.")
+        return _quote_delivery(item, campus, rules)
 
     typed = [r for r in rules if r["type_id"] == type_id]
     for rule in typed:
@@ -64,7 +82,7 @@ def quote(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str
 
 
 def fill_unit_prices(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str],
-                     lines: list[DeliveryLine], rules: list[dict]) -> list[Optional[int]]:
+                     lines: list[DeliveryLine], rules: list[dict], campus: str = "") -> list[Optional[int]]:
     """납품서 각 줄의 단가: 사용자 입력 > 자동 단가 > 빈칸."""
     out: list[Optional[int]] = []
     for line in lines:
@@ -72,6 +90,6 @@ def fill_unit_prices(mode: str, type_id: Optional[str], type_name: str, spec: di
         if typed is not None:
             out.append(typed)
             continue
-        q = quote(mode, type_id, type_name, spec, line.item, rules)
+        q = quote(mode, type_id, type_name, spec, line.item, rules, campus)
         out.append(q.price if q.status == "auto" else None)
     return out

@@ -223,3 +223,13 @@ def test_generate_without_manual_price_returns_422(client):
     res = client.post("/api/order-form/generate", json={"order": req})
     assert res.status_code == 422
     assert [e["code"] for e in res.json()["errors"]] == ["PRICE_REQUIRED"]
+
+
+def test_price_quote_for_blank_delivery_uses_receiver(client):
+    def quote(campus):
+        req = make_request(mode="blank_delivery", type_id=None, campus=campus,
+                           items=[{"name": "비닐봉투", "qty": "10"}, {"name": "고2 봉투모의고사 대봉투", "qty": "1"}]).model_dump()
+        return client.post("/api/order-form/price-quote", json={"order": req}).json()["items"]
+    assert [i["price"] for i in quote("하남크레오")] == [300, None]
+    assert [i["price"] for i in quote("분당캠퍼스")] == [200, None]
+    assert quote("분당캠퍼스")[1]["status"] == "manual"

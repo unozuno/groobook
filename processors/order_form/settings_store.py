@@ -13,7 +13,7 @@ from pathlib import Path
 from processors.order_form.clock import now_iso
 from processors.order_form.desktop_paths import norm_name
 from processors.order_form.seed import SCHEMA_VERSION, build_seed_settings
-from processors.order_form.seed_prices import SEED_PRICE_RULES
+from processors.order_form.seed_prices import SEED_DELIVERY_RULES, SEED_PRICE_RULES
 from processors.order_form.settings_models import SettingsValidationError, validate_settings
 
 SETTINGS_FILENAME = "order_settings.json"
@@ -90,6 +90,8 @@ def migrate(data: dict) -> dict:
     data["schema_version"] = SCHEMA_VERSION
     if "price_rules" not in data:   # 키 자체가 없을 때만 (관리자가 비운 [] 는 존중)
         data["price_rules"] = copy.deepcopy(SEED_PRICE_RULES)
+    elif version < 3 and not any(r.get("type_id") == "delivery" for r in data["price_rules"]):
+        data["price_rules"] = data["price_rules"] + copy.deepcopy(SEED_DELIVERY_RULES)   # v2→v3: 납품명세서 단가 추가
     return data
 
 

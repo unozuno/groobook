@@ -1,6 +1,6 @@
 """단가표 초기 규칙(seed).
 
-`sample/발주서 단일화.xlsx` 의 `단가표` 시트(3~100행)를 옮긴 것이다. 납품명세서 영역(102행~)은 제외.
+`sample/발주서 단일화.xlsx` 의 `단가표` 시트(3~100행)와, 빈 납품서용 납품명세서 영역(104~120행)을 옮긴 것이다.
 해석 규칙: 빈 조건 = 모두 통과, 목록 = 그중 하나와 일치, 위에서부터 처음 일치하는 행을 사용.
 price 가 None 이면 자동 단가 없음(직접 입력). 최초 실행 시 data/order_settings.json 으로 복사된 뒤 공통설정에서 수정한다.
 """
@@ -107,3 +107,29 @@ SEED_PRICE_RULES = [
     {'id': 'p099', 'type_id': 'invitation', 'when': {}, 'qty_min': None, 'qty_max': None, 'pages': None, 'price': None},
     {'id': 'p100', 'type_id': 'postcard', 'when': {}, 'qty_min': None, 'qty_max': None, 'pages': None, 'price': None},
 ]
+
+
+# 빈 납품서(납품명세서) 단가: 제품명 + 수령자. 위에서부터 처음 일치하는 줄을 쓰므로 학원 한정 줄이 일반 줄보다 앞에 온다.
+# 고3 모의고사 대봉투·고2 봉투모의고사 대봉투는 시트에서 파란 셀(단가 직접 입력)이다.
+_CREO = ['대치크레오', '하남크레오', '송파크레오']
+_DELIVERY = [
+    ('대봉투', [], 200),
+    ('모의고사 대봉투', [], 200),
+    ('고3 모의고사 대봉투', [], None),
+    ('고2 봉투모의고사 대봉투', [], None),
+    ('소봉투', [], 100),
+    ('적박소봉투', [], 150),
+    ('비닐봉투', _CREO, 300),
+    ('비닐봉투', [], 200),
+    ('쇼핑백', [], 1400),
+    ('브랜드 브로셔', [], 3720),
+    ('엘자화일', _CREO + ['키비즈'], 500),
+    ('엘자화일', [], 250),
+]
+SEED_DELIVERY_RULES = [
+    {'id': f'd{i:03d}', 'type_id': 'delivery', 'product': product, 'campuses': list(campuses), 'when': {},
+     'qty_min': None, 'qty_max': None, 'pages': None,
+     'price': None if amount is None else {'kind': 'fixed', 'amount': amount}}
+    for i, (product, campuses, amount) in enumerate(_DELIVERY, start=1)
+]
+SEED_PRICE_RULES = SEED_PRICE_RULES + SEED_DELIVERY_RULES

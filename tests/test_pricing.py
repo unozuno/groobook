@@ -96,10 +96,50 @@ def test_manual_types(type_id):
     assert r.status == "manual" and "직접 입력" in r.reason
 
 
-@pytest.mark.parametrize("mode", ["blank_order", "blank_delivery"])
-def test_blank_modes_are_always_manual(mode):
-    r = q("textbook", TEXTBOOK, mode=mode)
+def test_blank_order_is_always_manual():
+    r = q("textbook", TEXTBOOK, mode="blank_order")
     assert r.status == "manual" and "직접 입력" in r.reason
+
+
+# ───── 빈 납품서(납품명세서) ─────
+
+def dq(name, campus="분당캠퍼스"):
+    return quote("blank_delivery", None, "", {}, Item(name=name, qty=10, mono=None, insert=None, color=None, pages=0),
+                 RULES, campus)
+
+
+@pytest.mark.parametrize("name, price", [
+    ("대봉투", 200), ("모의고사 대봉투", 200), ("소봉투", 100), ("적박소봉투", 150),
+    ("쇼핑백", 1400), ("브랜드 브로셔", 3720), ("비닐봉투", 200), ("엘자화일", 250),
+])
+def test_delivery_default_prices(name, price):
+    r = dq(name)
+    assert (r.status, r.price) == ("auto", price)
+
+
+def test_delivery_campus_specific_prices_override_default():
+    for campus in ("대치크레오", "하남크레오", "송파크레오"):
+        assert dq("비닐봉투", campus).price == 300
+        assert dq("엘자화일", campus).price == 500
+    assert dq("엘자화일", "키비즈").price == 500
+    assert dq("비닐봉투", "키비즈").price == 200            # 키비즈는 엘자화일만 특가
+    assert dq("엘자화일", "분당캠퍼스").price == 250
+
+
+def test_delivery_campus_and_name_compare_ignore_spaces():
+    assert dq("엘자 화일", "키 비즈").price == 500
+    assert dq("모의고사대봉투").price == 200
+
+
+@pytest.mark.parametrize("name", ["고3 모의고사 대봉투", "고2 봉투모의고사 대봉투"])
+def test_delivery_blue_cells_are_manual(name):
+    r = dq(name)
+    assert r.status == "manual" and "직접 입력" in r.reason
+
+
+def test_delivery_unknown_product_is_manual():
+    r = dq("처음 보는 제품")
+    assert r.status == "manual" and "납품명세서 단가표에 없는 제품" in r.reason
 
 
 def test_type_without_any_rule_is_manual():
@@ -118,7 +158,7 @@ def _sheet_rows():
 @pytest.mark.skipif(not SAMPLE.exists(), reason="sample/발주서 단일화.xlsx 없음")
 def test_every_sheet_row_matches_its_rule_and_is_not_shadowed():
     prices = _sheet_rows()
-    priced = [r for r in RULES if r["price"] is not None]
+    priced = [r for r in RULES if r["price"] is not None and r["type_id"] != "delivery"]
     assert len(prices) == len(priced)
     for raw, rule in zip(prices, priced):
         spec = {f: vals[0] for f, vals in rule["when"].items()}
