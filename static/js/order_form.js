@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
 
   const BLANK_ORDER_LABEL = '빈 발주서';
-  const BLANK_DELIVERY_LABEL = '빈 납품서';
+  const BLANK_DELIVERY_LABEL = '납품서';
   const SIZE_FOLLOW_FIELDS = ['insert_size', 'cover_size'];
   const SIZE_SOURCE = 'inner_size';
   const ITEM_NUM_LABELS = { qty: '발주수량', mono: '1도', insert: '청간지', color: '4도', pages: '페이지', unit_price: '단가' };
@@ -157,7 +157,7 @@
     state.typeId = newType ? newType.id : null;
     state.typeName = newName;
     if (newMode !== 'order' && !newType) {
-      // 빈 발주서/빈 납품서: 품목 기본값 제거를 위해 빈 품목으로 리셋하지 않고 값은 유지
+      // 빈 발주서/납품서: 품목 기본값 제거를 위해 빈 품목으로 리셋하지 않고 값은 유지
     }
     applyTypeDefaults();
     state.serverIssues = null;
@@ -294,7 +294,7 @@
           const ro = c.readonly ? 'readonly tabindex="-1" class="num cell-readonly"' : `class="${c.type === 'num' ? 'num' : ''}"`;
           const val = c.readonly ? itemQty(it) : esc(it[c.key]);
           const note = c.key === 'unitPrice' ? '<small class="price-note"></small>' : '';
-          const list = c.key === 'name' && isBlankDelivery() ? 'list="dl-products" autocomplete="off"' : '';   // 납품명세서 제품 목록
+          const list = c.key === 'name' && isBlankDelivery() ? 'list="dl-products" autocomplete="off"' : '';   // 납품서 제품 목록
           html += `<td><input type="text" ${ro} ${list} data-i="${i}" data-k="${c.key}" data-path="${path}" value="${val}" ${c.type === 'num' ? 'inputmode="numeric"' : ''}>${note}</td>`;
         }
       }
@@ -516,7 +516,7 @@
     $('receivedDateField').style.display = bd ? 'none' : '';
     $('blankTypeNameField').style.display = state.mode === 'blank_order' ? '' : 'none';
     $('multiNameField').style.display = multi ? '' : 'none';
-    $('campusLabel').textContent = bd ? '수령자' : '납품학원';
+    $('campusLabel').textContent = '납품학원';
     $('dueDateLabel').textContent = bd ? '납품일' : '납기일자';
     $('itemsTitle').textContent = bd ? '납품 품목' : '품목';
     $('generateBtn').textContent = bd ? '납품서 생성' : '발주서 생성';
@@ -576,7 +576,7 @@
     if (multi) {
       if (!state.multiName.trim()) err('MULTI_NAME_REQUIRED', 'multi_name', '다중 발주 파일명에 쓸 이름을 입력해 주세요.');
     } else if (bd) {
-      if (!state.campus.trim()) err('RECEIVER_REQUIRED', 'campus', '수령자를 입력해 주세요.');
+      if (!state.campus.trim()) err('RECEIVER_REQUIRED', 'campus', '납품학원을 입력해 주세요.');
     } else if (!state.campus.trim()) {
       err('CAMPUS_REQUIRED', 'campus', '납품학원을 입력해 주세요.');
     }

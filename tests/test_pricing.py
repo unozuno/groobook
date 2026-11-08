@@ -101,7 +101,7 @@ def test_blank_order_is_always_manual():
     assert r.status == "manual" and "직접 입력" in r.reason
 
 
-# ───── 빈 납품서(납품명세서) ─────
+# ───── 납품서 모드(납품명세서 단가) ─────
 
 def dq(name, campus="분당캠퍼스"):
     return quote("blank_delivery", None, "", {}, Item(name=name, qty=10, mono=None, insert=None, color=None, pages=0),
@@ -139,7 +139,7 @@ def test_delivery_blue_cells_are_manual(name):
 
 def test_delivery_unknown_product_is_manual():
     r = dq("처음 보는 제품")
-    assert r.status == "manual" and "납품명세서 단가표에 없는 제품" in r.reason
+    assert r.status == "manual" and "납품서 단가표에 없는 제품" in r.reason
 
 
 def test_type_without_any_rule_is_manual():

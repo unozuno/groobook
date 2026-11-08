@@ -142,7 +142,7 @@ def test_blank_delivery_uses_pages_and_price(settings):
     assert "ITEM_PAGES_ZERO" not in codes(res, "warnings")
     assert [(i.code, i.path) for i in res.errors] == [("PRICE_INVALID", "items[1].unit_price")]
     req.items[1].unit_price = ""
-    res, order = validate(req, settings)      # 빈 납품서는 자동 단가가 없어 직접 입력이 필수
+    res, order = validate(req, settings)      # 표에 없는 제품은 자동 단가가 없어 직접 입력이 필수
     assert [(i.code, i.path) for i in res.errors] == [("PRICE_REQUIRED", "items[1].unit_price")]
     req.items[1].unit_price = "300"
     res, order = validate(req, settings)

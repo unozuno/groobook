@@ -91,7 +91,7 @@ def migrate(data: dict) -> dict:
     if "price_rules" not in data:   # 키 자체가 없을 때만 (관리자가 비운 [] 는 존중)
         data["price_rules"] = copy.deepcopy(SEED_PRICE_RULES)
     elif version < 3 and not any(r.get("type_id") == "delivery" for r in data["price_rules"]):
-        data["price_rules"] = data["price_rules"] + copy.deepcopy(SEED_DELIVERY_RULES)   # v2→v3: 납품명세서 단가 추가
+        data["price_rules"] = data["price_rules"] + copy.deepcopy(SEED_DELIVERY_RULES)   # v2→v3: 납품서 단가 추가
     return data
 
 

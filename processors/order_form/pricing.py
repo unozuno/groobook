@@ -45,7 +45,7 @@ def _compute(price: dict, item: Item) -> int:
 
 
 def _quote_delivery(item: Item, campus: str, rules: list[dict]) -> PriceQuote:
-    """빈 납품서: 제품명이 같고 수령자가 맞는 첫 납품명세서 규칙 (수령자가 비어 있는 규칙은 모든 수령자)."""
+    """납품서 모드: 제품명이 같고 납품학원이 맞는 첫 규칙 (납품학원이 비어 있는 규칙은 모든 납품학원)."""
     product = _norm(item.name)
     named = [r for r in rules if r["type_id"] == DELIVERY_TYPE_ID and _norm(r.get("product", "")) == product]
     for rule in named:
@@ -56,14 +56,14 @@ def _quote_delivery(item: Item, campus: str, rules: list[dict]) -> PriceQuote:
             return PriceQuote("manual", rule_id=rule["id"], reason=f"'{item.name}' 은(는) 단가를 직접 입력해야 합니다.")
         return PriceQuote("auto", price=_compute(rule["price"], item), rule_id=rule["id"])
     if named:
-        return PriceQuote("manual", reason=f"'{item.name}' 은(는) 이 수령자의 단가가 없어 직접 입력해야 합니다.")
-    return PriceQuote("manual", reason="납품명세서 단가표에 없는 제품이라 단가를 직접 입력해야 합니다.")
+        return PriceQuote("manual", reason=f"'{item.name}' 은(는) 이 납품학원의 단가가 없어 직접 입력해야 합니다.")
+    return PriceQuote("manual", reason="납품서 단가표에 없는 제품이라 단가를 직접 입력해야 합니다.")
 
 
 def quote(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str],
           item: Item, rules: list[dict], campus: str = "") -> PriceQuote:
     """한 품목의 자동 단가. item.qty 는 총 발주수량(다중이면 분배표 합계)이어야 한다.
-    campus 는 빈 납품서의 수령자(학원별로 단가가 다른 제품용)."""
+    campus 는 납품서 모드의 납품학원(학원별로 단가가 다른 제품용)."""
     if mode == "blank_order":
         return PriceQuote("manual", reason="빈 발주서는 단가를 직접 입력해야 합니다.")
     if mode == "blank_delivery":

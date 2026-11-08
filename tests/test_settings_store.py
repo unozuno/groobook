@@ -110,7 +110,7 @@ def test_seed_has_price_rules_for_every_priced_type():
     by_type = {}
     for r in s["price_rules"]:
         by_type.setdefault(r["type_id"], []).append(r)
-    ids = {t["id"] for t in s["types"]} | {"delivery"}   # delivery = 빈 납품서(납품명세서)
+    ids = {t["id"] for t in s["types"]} | {"delivery"}   # delivery = 납품서 모드 단가
     assert set(by_type) == ids                       # 상장·초대장 등은 price=None 규칙으로 존재
     assert all(r["price"] is None for r in by_type["certificate"] + by_type["invitation"])
     assert len(by_type["textbook"]) == 28
@@ -257,7 +257,7 @@ def test_email_is_trimmed_and_blank_allowed():
     assert out[0]["email"] == "a@test.kr" and out[1]["email"] == ""
 
 
-# ───────────────────────── 납품명세서(빈 납품서) 단가 규칙 ─────────────────────────
+# ───────────────────────── 납품서 모드 단가 규칙 ─────────────────────────
 
 def test_seed_delivery_rules():
     rules = [r for r in validate_settings(build_seed_settings())["price_rules"] if r["type_id"] == "delivery"]
@@ -301,5 +301,5 @@ def test_invalid_delivery_rule_rejected(mutate, fragment):
 def test_product_not_allowed_on_normal_rule():
     s = build_seed_settings()
     s["price_rules"][0]["product"] = "대봉투"
-    with pytest.raises(SettingsValidationError, match="납품명세서 단가에만"):
+    with pytest.raises(SettingsValidationError, match="납품서 단가에만"):
         validate_settings(s)

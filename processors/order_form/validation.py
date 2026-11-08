@@ -125,7 +125,7 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
     if not req.job_no.strip():
         res.error("JOB_NO_REQUIRED", "job_no", "작업번호를 입력해 주세요.")
 
-    # 납품학원 / 수령자
+    # 납품학원
     campus = req.campus.strip()
     multi_name = req.multi_name.strip()
     if multi:
@@ -134,7 +134,7 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
             res.error("MULTI_NAME_REQUIRED", "multi_name", "다중 발주 파일명에 쓸 이름을 입력해 주세요.")
     elif mode == "blank_delivery":
         if not campus:
-            res.error("RECEIVER_REQUIRED", "campus", "수령자를 입력해 주세요.")
+            res.error("RECEIVER_REQUIRED", "campus", "납품학원을 입력해 주세요.")
     else:
         if not campus:
             res.error("CAMPUS_REQUIRED", "campus", "납품학원을 입력해 주세요.")

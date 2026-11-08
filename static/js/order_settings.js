@@ -355,8 +355,8 @@
   const PRICE_COND_FIELDS = ['binding_method', 'inner_paper', 'inner_print', 'inner_size', 'cover_paper', 'cover_print', 'cover_size'];
   const PRICE_KINDS = { manual: '직접 입력', fixed: '고정 금액', per_page: '페이지당 금액 × 페이지 + 기본액' };
 
-  const DELIVERY_ID = 'delivery';   // 빈 납품서(납품명세서): 제품명 + 수령자별 단가
-  const DELIVERY_LABEL = '납품명세서 (빈 납품서)';
+  const DELIVERY_ID = 'delivery';   // 납품서(납품서 모드): 제품명 + 납품학원별 단가
+  const DELIVERY_LABEL = '납품서';
   const DELIVERY_KINDS = { manual: '직접 입력', fixed: '고정 금액' };
   const priceKind = r => (r.price ? r.price.kind : 'manual');
   const numOrNull = v => (String(v).trim() === '' ? null : Number(String(v).replace(/,/g, '')));
@@ -408,7 +408,7 @@
   }
 
   function renderDeliveryPrices() {
-    $('priceHead').innerHTML = '<tr><th>#</th><th style="min-width:200px;">제품명</th><th style="min-width:260px;">수령자 (비우면 모든 학원)</th><th style="min-width:130px;">방식</th><th style="min-width:100px;">단가</th><th></th></tr>';
+    $('priceHead').innerHTML = '<tr><th>#</th><th style="min-width:200px;">제품명</th><th style="min-width:260px;">납품학원 (비우면 모든 학원)</th><th style="min-width:130px;">방식</th><th style="min-width:100px;">단가</th><th></th></tr>';
     const rules = priceRulesOfType();
     $('priceBody').innerHTML = rules.length ? rules.map((r, i) => {
       const kind = priceKind(r);
@@ -424,7 +424,7 @@
           <button type="button" class="icon-btn" data-pact="copy" title="이 줄을 그대로 복사해 아래에 추가">복제</button>
           <button type="button" class="icon-btn danger" data-pact="del" title="삭제">✕</button>
         </td></tr>`;
-    }).join('') : '<tr><td colspan="6" class="hint" style="text-align:center;padding:14px;">납품명세서 단가 줄이 없습니다. 빈 납품서의 단가는 직접 입력해야 합니다.</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="hint" style="text-align:center;padding:14px;">납품서 단가 줄이 없습니다. 납품서의 단가는 직접 입력해야 합니다.</td></tr>';
   }
 
   function bindPrices() {
@@ -542,10 +542,10 @@
     for (const a of s.address_book) {
       if (!emailOk(a.email || '')) problems.push(`'${a.name.trim() || '(이름 없음)'}' 의 이메일 형식이 올바르지 않습니다. 학원당 메일 주소 1개만 입력할 수 있습니다.`);
     }
-    const typeName = id => (id === DELIVERY_ID ? '납품명세서' : (s.types.find(t => t.id === id) || {}).name || id);
+    const typeName = id => (id === DELIVERY_ID ? '납품서' : (s.types.find(t => t.id === id) || {}).name || id);
     s.price_rules.forEach(r => {
       if (r.qty_min != null && r.qty_max != null && r.qty_min > r.qty_max) problems.push(`단가표 · ${typeName(r.type_id)}: 수량 하한이 상한보다 큰 줄이 있습니다.`);
-      if (r.type_id === DELIVERY_ID && !(r.product || '').trim()) problems.push('단가표 · 납품명세서: 제품명이 비어 있는 줄이 있습니다.');
+      if (r.type_id === DELIVERY_ID && !(r.product || '').trim()) problems.push('단가표 · 납품서: 제품명이 비어 있는 줄이 있습니다.');
       if (r.price && r.price.kind === 'fixed' && r.price.amount == null) problems.push(`단가표 · ${typeName(r.type_id)}: 금액이 비어 있는 고정 단가 줄이 있습니다.`);
       if (r.price && r.price.kind === 'per_page' && r.price.rate == null) problems.push(`단가표 · ${typeName(r.type_id)}: 페이지당 금액이 비어 있는 줄이 있습니다.`);
     });

@@ -24,7 +24,7 @@ class ItemIn(BaseModel):
     mono: Num = None      # 1도 페이지 수
     insert: Num = None    # 청간지 페이지 수
     color: Num = None     # 4도 페이지 수
-    pages: Num = None     # 빈 납품서 모드에서만 직접 입력
+    pages: Num = None     # 납품서 모드에서만 직접 입력
     unit_price: Num = None
 
 
@@ -120,7 +120,7 @@ class Order:
     type_name: str
     received_date: Optional[date]
     due_date: Optional[date]
-    campus: str                 # 다중이면 multi_label, 빈 납품서면 수령자
+    campus: str                 # 다중이면 multi_label, 납품서 모드면 납품학원
     multi_name: str
     job_no: str
     spec: dict[str, str]
