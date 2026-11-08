@@ -257,14 +257,14 @@
   function itemColumns() {
     if (isBlankDelivery()) {
       return [
-        { key: 'name', label: '제품명', type: 'text' },
+        { key: 'name', label: '제품명 *', type: 'text' },
         { key: 'qty', label: '수량', type: 'num' },
         { key: 'pages', label: '페이지', type: 'num' },
         { key: 'unitPrice', label: '단가', type: 'num' },
       ];
     }
     return [
-      { key: 'name', label: '교재명', type: 'text' },
+      { key: 'name', label: '교재명 *', type: 'text' },
       { key: 'qty', label: '발주수량', type: 'num', readonly: isMulti() },
       { key: 'mono', label: '1도', type: 'num' },
       { key: 'insert', label: '청간지', type: 'num' },
@@ -544,6 +544,9 @@
     state.items.forEach((it, i) => {
       if (itemIsEmpty(it)) return;
       kept.push(i);
+      if (!it.name.trim()) {
+        err('ITEM_NAME_REQUIRED', `items[${i}].name`, `${i + 1}번 품목의 ${bd ? '제품명' : '교재명'}을 입력해 주세요.`);
+      }
       const nums = {};
       for (const [k, pk] of [['qty', 'qty'], ['mono', 'mono'], ['insert', 'insert'], ['color', 'color'], ['pages', 'pages'], ['unitPrice', 'unit_price']]) {
         if (k === 'qty' && multi) { nums.qty = itemQty(it); continue; }

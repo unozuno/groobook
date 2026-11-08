@@ -153,6 +153,9 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         if not any(fields_present.values()):
             continue
         kept_idx.append(i)
+        if _blank(it.name):
+            label = "제품명" if mode == "blank_delivery" else "교재명"
+            res.error("ITEM_NAME_REQUIRED", f"items[{i}].name", f"{i + 1}번 품목의 {label}을 입력해 주세요.")
         nums = {}
         for key in ("qty", "mono", "insert", "color", "pages", "unit_price"):
             ok, val = parse_int(getattr(it, key))

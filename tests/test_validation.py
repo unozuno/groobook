@@ -66,6 +66,28 @@ def test_empty_item_rows_are_dropped_but_paths_keep_original_index(settings):
     assert [(i.code, i.path) for i in res.errors] == [("ITEM_NUM_INVALID", "items[1].color")]
 
 
+def test_item_name_required(settings):
+    req = base_request(items=[
+        {"name": "A", "qty": "10"},
+        {"name": " ", "qty": "5", "color": "1"},   # 이름 없이 값만 있음
+        {"name": "", "qty": ""},                     # 완전히 빈 행은 무시
+    ])
+    res, order = validate(req, settings)
+    assert order is None
+    assert [(i.code, i.path) for i in res.errors] == [("ITEM_NAME_REQUIRED", "items[1].name")]
+    assert "교재명" in res.errors[0].message
+    req.items[1].name = "B"
+    res, order = validate(req, settings)
+    assert res.ok and [it.name for it in order.items] == ["A", "B"]
+
+
+def test_item_name_required_in_blank_delivery(settings):
+    req = base_request(mode="blank_delivery", campus="분당캠퍼스", items=[{"name": "", "qty": "5"}])
+    res, _ = validate(req, settings)
+    assert [(i.code, i.path) for i in res.errors] == [("ITEM_NAME_REQUIRED", "items[0].name")]
+    assert "제품명" in res.errors[0].message
+
+
 def test_type_required(settings):
     res, _ = validate(base_request(type_id="nope"), settings)
     assert "TYPE_REQUIRED" in codes(res, "errors")
