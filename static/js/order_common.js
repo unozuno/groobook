@@ -52,8 +52,8 @@ window.OF = (() => {
 
   /**
    * 드롭다운 + 직접 입력 콤보박스.
-   * input 에 datalist 를 연결하고 "▾" 토글을 붙인다. 토글을 누르면 값을 비우고
-   * 포커스해 전체 목록이 보이게 하며, 아무것도 고르지 않고 벗어나면 이전 값을 복원한다.
+   * input 에 datalist 를 연결한다. 목록 화살표는 브라우저 기본 것 하나만 쓴다
+   * (별도 토글 버튼은 값을 비워서 초기화처럼 보이므로 두지 않는다).
    */
   function makeCombobox(input, datalistId) {
     input.setAttribute('list', datalistId);
@@ -63,28 +63,6 @@ window.OF = (() => {
     wrap.className = 'combo';
     input.parentNode.insertBefore(wrap, input);
     wrap.appendChild(input);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'combo-toggle';
-    btn.tabIndex = -1;
-    btn.textContent = '▾';
-    btn.title = '목록 보기';
-    let prev = null;
-    btn.addEventListener('mousedown', e => {
-      e.preventDefault();
-      if (input.disabled) return;
-      prev = input.value;
-      input.value = '';
-      input.focus();
-    });
-    input.addEventListener('blur', () => {
-      if (prev !== null && input.value === '') {
-        input.value = prev;
-      }
-      prev = null;
-    });
-    input.addEventListener('input', () => { prev = null; });
-    wrap.appendChild(btn);
     return input;
   }
 
