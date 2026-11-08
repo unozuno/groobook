@@ -799,7 +799,16 @@ header {
   min-height: 38px;
 }
 
+.radio-group input[type="radio"] {
+  width: auto;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+
 .radio-group label {
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 6px;
