@@ -14,7 +14,7 @@ from processors.order_form.fields import FIELD_IDS
 from processors.order_form.models import (
     DeliveryLine, DeliveryNote, DistributionRow, Item, Order, OrderRequest,
 )
-from processors.order_form.pricing import fill_unit_prices
+from processors.order_form.pricing import fill_unit_prices, quote
 
 _INT_RE = re.compile(r"-?\d+(\.0+)?")
 _ITEM_NUM_LABELS = {"qty": "발주수량", "mono": "1도", "insert": "청간지", "color": "4도",
@@ -139,6 +139,8 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         if not campus:
             res.error("CAMPUS_REQUIRED", "campus", "납품학원을 입력해 주세요.")
 
+    price_rules = settings.get("price_rules", [])
+
     # 사양
     spec = {fid: (req.spec.get(fid) or "").strip() for fid in FIELD_IDS}
 
@@ -151,6 +153,7 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
     # 품목
     items: list[Item] = []
     kept_idx: list[int] = []
+    bad_price: set[int] = set()   # 형식 오류가 난 단가 칸 (PRICE_REQUIRED 를 중복으로 내지 않음)
     for i, it in enumerate(req.items):
         fields_present = {k: not _blank(getattr(it, k)) for k in
                           ("name", "qty", "mono", "insert", "color", "pages", "unit_price")}
@@ -164,6 +167,8 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         for key in ("qty", "mono", "insert", "color", "pages", "unit_price"):
             ok, val = parse_int(getattr(it, key))
             if not ok:
+                if key == "unit_price":
+                    bad_price.add(i)
                 code = "PRICE_INVALID" if key == "unit_price" else "ITEM_NUM_INVALID"
                 res.error(code, f"items[{i}].{key}",
                           f"{i + 1}번 품목의 {_ITEM_NUM_LABELS[key]}은(는) 0 이상의 정수여야 합니다.")
@@ -227,6 +232,10 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         if not it.qty and others:
             res.warn("ITEM_QTY_EMPTY", f"items[{i}].qty",
                      f"{i + 1}번 품목의 발주수량이 비어 있거나 0 입니다.")
+        if it.qty and it.unit_price is None and i not in bad_price:
+            q = quote(mode, type_id, type_name, spec, it, price_rules)
+            if q.status == "manual":
+                res.error("PRICE_REQUIRED", f"items[{i}].unit_price", f"{i + 1}번 품목: {q.reason}")
 
     # 납품서 구성
     deliveries: list[DeliveryNote] = []
@@ -272,5 +281,5 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         distribution=distribution, deliveries=deliveries,
     )
     for note in order.deliveries:
-        note.unit_prices = fill_unit_prices(order, note.lines)
+        note.unit_prices = fill_unit_prices(mode, type_id, type_name, spec, note.lines, price_rules)
     return res, order

@@ -58,7 +58,7 @@ def test_delivery_sheet_layout(sample_order):
     assert ws["C3"].value == datetime(2026, 11, 10) and ws["F3"].value == 2105
     assert ws["C5"].value == "평촌캠퍼스" and ws["F5"].value == "그루북"
     assert (ws["D8"].value, ws["E8"].value, ws["F8"].value) == ("페이지", "단가", "공급액")
-    assert (ws["B9"].value, ws["C9"].value, ws["D9"].value, ws["E9"].value) == ("중2 영어 내신", 700, 2, None)
+    assert (ws["B9"].value, ws["C9"].value, ws["D9"].value, ws["E9"].value) == ("중2 영어 내신", 700, 2, 660)
     assert ws["E11"].value == 1200
     assert ws["F9"].value == '=IF(AND(C9>0,E9<>""),C9*E9,"")'
     assert ws["A19"].value == "합계" and ws["C19"].value == "=SUM(C9:C18)" and ws["F19"].value == "=SUM(F9:F18)"
@@ -115,7 +115,8 @@ def test_blank_delivery_only_sheet(make_order):
 
 
 def test_blank_order_has_empty_type_and_spec(make_order):
-    order = make_order(mode="blank_order", type_id=None, type_name="", spec={}, messages=[])
+    order = make_order(mode="blank_order", type_id=None, type_name="", spec={}, messages=[],
+                       items=[{"name": "A", "qty": "10", "unit_price": "100"}])
     _, wb = _wb(order)
     ws = wb["발주서"]
     assert ws["D1"].value is None and ws["C4"].value is None and ws["B9"].value is None

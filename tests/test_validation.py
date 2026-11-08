@@ -19,8 +19,8 @@ def base_request(**kw) -> OrderRequest:
         "spec": {"binding_method": "무선제본", "inner_size": "210*297"},
         "messages": ["사이즈 조정해 주세요"], "message_extra": "",
         "items": [
-            {"name": "중2 영어", "qty": "700", "mono": "", "insert": "", "color": "2"},
-            {"name": "중3 영어", "qty": 300, "mono": "10", "insert": "2", "color": ""},
+            {"name": "중2 영어", "qty": "700", "mono": "", "insert": "", "color": "2", "unit_price": "1000"},
+            {"name": "중3 영어", "qty": 300, "mono": "10", "insert": "2", "color": "", "unit_price": "1000"},
         ],
     }
     data.update(kw)
@@ -60,7 +60,7 @@ def test_valid_single_order(settings):
 def test_empty_item_rows_are_dropped_but_paths_keep_original_index(settings):
     req = base_request(items=[
         {"name": "", "qty": ""},
-        {"name": "A", "qty": "10", "color": "x"},
+        {"name": "A", "qty": "10", "color": "x", "unit_price": "100"},
     ])
     res, _ = validate(req, settings)
     assert [(i.code, i.path) for i in res.errors] == [("ITEM_NUM_INVALID", "items[1].color")]
@@ -68,8 +68,8 @@ def test_empty_item_rows_are_dropped_but_paths_keep_original_index(settings):
 
 def test_item_name_required(settings):
     req = base_request(items=[
-        {"name": "A", "qty": "10"},
-        {"name": " ", "qty": "5", "color": "1"},   # 이름 없이 값만 있음
+        {"name": "A", "qty": "10", "unit_price": "100"},
+        {"name": " ", "qty": "5", "color": "1", "unit_price": "100"},   # 이름 없이 값만 있음
         {"name": "", "qty": ""},                     # 완전히 빈 행은 무시
     ])
     res, order = validate(req, settings)
@@ -82,7 +82,7 @@ def test_item_name_required(settings):
 
 
 def test_item_name_required_in_blank_delivery(settings):
-    req = base_request(mode="blank_delivery", campus="분당캠퍼스", items=[{"name": "", "qty": "5"}])
+    req = base_request(mode="blank_delivery", campus="분당캠퍼스", items=[{"name": "", "qty": "5", "unit_price": "100"}])
     res, _ = validate(req, settings)
     assert [(i.code, i.path) for i in res.errors] == [("ITEM_NAME_REQUIRED", "items[0].name")]
     assert "제품명" in res.errors[0].message
@@ -142,14 +142,17 @@ def test_blank_delivery_uses_pages_and_price(settings):
     assert "ITEM_PAGES_ZERO" not in codes(res, "warnings")
     assert [(i.code, i.path) for i in res.errors] == [("PRICE_INVALID", "items[1].unit_price")]
     req.items[1].unit_price = ""
+    res, order = validate(req, settings)      # 빈 납품서는 자동 단가가 없어 직접 입력이 필수
+    assert [(i.code, i.path) for i in res.errors] == [("PRICE_REQUIRED", "items[1].unit_price")]
+    req.items[1].unit_price = "300"
     res, order = validate(req, settings)
     assert res.ok
     assert order.items[0].pages == 80 and order.items[0].unit_price == 1500
-    assert order.deliveries[0].unit_prices == [1500, None]
+    assert order.deliveries[0].unit_prices == [1500, 300]
 
 
 def test_blank_order_uses_typed_name_and_blank_spec(settings):
-    req = base_request(mode="blank_order", type_id=None, type_name=" 특수 ", spec={})
+    req = base_request(mode="blank_order", type_id=None, type_name=" 특수 ", spec={})  # 단가는 base_request 에 포함
     res, order = validate(req, settings)
     assert res.ok and order.type_name == "특수" and all(v == "" for v in order.spec.values())
 

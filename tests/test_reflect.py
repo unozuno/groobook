@@ -58,7 +58,7 @@ def test_invoice_sheet_appended_at_end(make_order, desk):
     assert ws["A1"].value == "납   품   명   세   서"
     assert ws["C3"].value == datetime(2026, 11, 27)
     assert (ws["C5"].value, ws["B9"].value, ws["C9"].value, ws["E9"].value) == ("분당캠퍼스", "교재 상품권 난수", 1000, 250)
-    assert ws["E10"].value is None
+    assert ws["E10"].value == 660                          # 입력 없는 품목은 단가표 자동 단가
     assert "분당" in ws["A21"].value                      # 주소록 값이 들어감
     # 기존 시트·이미지 불변
     assert len(wb["견적서"]._images) == 1
@@ -137,7 +137,7 @@ def test_marketing_rows_appended(make_order, desk):
     assert row4[:5] == [datetime(2026, 11, 27), "교재 상품권 난수", 1000, 2, 250]
     assert row4[5] == "=O4*Q4"
     row5 = [ws.cell(5, c0 + k).value for k in range(6)]
-    assert row5 == [datetime(2026, 11, 27), "레벨테스트권 난수", 500, 2, None, None]   # 단가 없으면 금액 비움
+    assert row5 == [datetime(2026, 11, 27), "레벨테스트권 난수", 500, 2, 660, "=O5*Q5"]   # 입력 없으면 자동 단가
     assert ws.cell(4, c0).number_format == 'mm"월"\\ dd"일"'
     assert ws.cell(TOTAL_ROW, c0 + 2).value == f"=SUM({'O'}{DATA_FIRST}:{'O'}47)"
     assert ws.cell(4, 1).value is None              # 다른 학원 구역은 그대로

@@ -1,12 +1,77 @@
-"""납품서 단가 결정 지점.
+"""납품서 단가 결정.
 
-1단계: 사용자가 입력한 단가를 그대로 쓴다 (없으면 빈칸, 엑셀에서 직접 입력).
-2단계: 단가표가 나오면 이 함수에서 제작 종류·사양·페이지·수량을 보고 단가를 채운다.
+설정의 단가표(price_rules)에서 제작 종류·사양·페이지합계·총 발주수량이 모두 맞는
+첫 규칙을 찾아 단가를 계산한다. 규칙이 없거나 규칙의 price 가 비어 있으면 직접 입력이다.
+사용자가 단가를 직접 넣은 품목은 그 값을 우선한다 (자동 단가는 수정 가능해야 함).
 """
+from dataclasses import dataclass
 from typing import Optional
 
-from processors.order_form.models import DeliveryLine, Order
+from processors.order_form.models import DeliveryLine, Item
 
 
-def fill_unit_prices(order: Order, lines: list[DeliveryLine]) -> list[Optional[int]]:
-    return [line.item.unit_price for line in lines]
+@dataclass
+class PriceQuote:
+    status: str                     # "auto" | "manual"
+    price: Optional[int] = None
+    rule_id: Optional[str] = None
+    reason: str = ""                # manual 일 때 사용자에게 보여 줄 이유
+
+
+def _norm(value: str) -> str:
+    """공백을 모두 제거해 비교한다 ('200 스노우' == '200스노우')."""
+    return "".join((value or "").split())
+
+
+def _matches(rule: dict, spec: dict[str, str], item: Item) -> bool:
+    for field, allowed in rule["when"].items():
+        if _norm(spec.get(field, "")) not in {_norm(a) for a in allowed}:
+            return False
+    qty = item.qty or 0
+    if rule["qty_min"] is not None and qty < rule["qty_min"]:
+        return False
+    if rule["qty_max"] is not None and qty > rule["qty_max"]:
+        return False
+    if rule["pages"] is not None and item.pages != rule["pages"]:
+        return False
+    return True
+
+
+def _compute(price: dict, item: Item) -> int:
+    if price["kind"] == "fixed":
+        return price["amount"]
+    return item.pages * price["rate"] + (price["base"] or 0)
+
+
+def quote(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str],
+          item: Item, rules: list[dict]) -> PriceQuote:
+    """한 품목의 자동 단가. item.qty 는 총 발주수량(다중이면 분배표 합계)이어야 한다."""
+    if mode == "blank_order":
+        return PriceQuote("manual", reason="빈 발주서는 단가를 직접 입력해야 합니다.")
+    if mode == "blank_delivery":
+        return PriceQuote("manual", reason="빈 납품서는 단가를 직접 입력해야 합니다.")
+
+    typed = [r for r in rules if r["type_id"] == type_id]
+    for rule in typed:
+        if _matches(rule, spec, item):
+            if rule["price"] is None:
+                return PriceQuote("manual", rule_id=rule["id"],
+                                  reason=f"{type_name}은(는) 단가를 직접 입력해야 합니다.")
+            return PriceQuote("auto", price=_compute(rule["price"], item), rule_id=rule["id"])
+    if not typed:
+        return PriceQuote("manual", reason=f"{type_name}의 단가표가 없어 단가를 직접 입력해야 합니다.")
+    return PriceQuote("manual", reason="단가표에 없는 조합이라 단가를 직접 입력해야 합니다.")
+
+
+def fill_unit_prices(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str],
+                     lines: list[DeliveryLine], rules: list[dict]) -> list[Optional[int]]:
+    """납품서 각 줄의 단가: 사용자 입력 > 자동 단가 > 빈칸."""
+    out: list[Optional[int]] = []
+    for line in lines:
+        typed = line.item.unit_price
+        if typed is not None:
+            out.append(typed)
+            continue
+        q = quote(mode, type_id, type_name, spec, line.item, rules)
+        out.append(q.price if q.status == "auto" else None)
+    return out
