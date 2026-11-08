@@ -83,6 +83,13 @@ GMAIL_APP_PASSWORD=your-16-char-app-password
 scp -i your-key.pem campus_emails.json ec2-user@<EC2-IP>:/home/ec2-user/groobook-web/
 ```
 
+### Step 5-1: 공통발주서 데이터 폴더 (`data/`)
+
+공통발주서 설정(`data/order_settings.json`)과 발주 원본(`data/orders/*.json`)은 서버가 첫 요청 때 자동으로 만듭니다.
+- git 에 포함되지 않으므로 `git pull` 로 코드를 갱신해도 설정은 유지됩니다.
+- 백업은 `data/` 폴더를 통째로 복사하면 됩니다. 다른 위치에 두려면 서비스 환경변수 `GROOBOOK_DATA_DIR` 를 지정합니다.
+- 설정은 반드시 웹 화면(`/order-settings`)에서 수정하고, 서버 실행 중에 파일을 직접 편집하지 않습니다.
+
 ### Step 6: 서비스 상태 확인
 
 ```bash
