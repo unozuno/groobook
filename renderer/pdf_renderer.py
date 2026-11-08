@@ -1,6 +1,5 @@
 import os
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML as WeasyprintHTML
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 _jinja_env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
@@ -31,6 +30,9 @@ def render_pdf(slip_list: list, progress_cb=None, proc_type: str = "default") ->
         html_str = template.render(rows=rows)
 
     cb(90, "PDF 변환 중...")
+    # WeasyPrint 는 GTK 시스템 라이브러리를 요구하므로 실제 변환 시점에만 불러온다
+    # (라이브러리가 없는 환경에서도 서버 기동과 엑셀 기능은 동작하도록)
+    from weasyprint import HTML as WeasyprintHTML
     pdf_bytes = WeasyprintHTML(string=html_str).write_pdf()
 
     cb(100, "완료!")
