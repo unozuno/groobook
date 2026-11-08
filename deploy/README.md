@@ -88,6 +88,7 @@ scp -i your-key.pem campus_emails.json ec2-user@<EC2-IP>:/home/ec2-user/groobook
 공통발주서 설정(`data/order_settings.json`)과 발주 원본(`data/orders/*.json`)은 서버가 첫 요청 때 자동으로 만듭니다.
 - git 에 포함되지 않으므로 `git pull` 로 코드를 갱신해도 설정은 유지됩니다.
 - 백업은 `data/` 폴더를 통째로 복사하면 됩니다. 다른 위치에 두려면 서비스 환경변수 `GROOBOOK_DATA_DIR` 를 지정합니다.
+- 바탕화면의 청구서·마케팅팀 엑셀에 반영하는 기능은 파일이 있는 PC에서 서버를 실행할 때만 동작합니다. EC2 서버에서는 "바탕화면을 찾을 수 없음"으로 안내되고 엑셀 생성만 가능합니다.
 - 설정은 반드시 웹 화면(`/order-settings`)에서 수정하고, 서버 실행 중에 파일을 직접 편집하지 않습니다.
 
 ### Step 6: 서비스 상태 확인

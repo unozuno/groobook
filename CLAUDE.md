@@ -85,6 +85,19 @@ User fills form (vanilla JS in static/js/order_form.js mirrors server validation
 Admin: /order-settings ↔ GET/PUT /api/order-settings (+ /export, /reset); PUT checks expected_updated_at (409 on conflict)
 ```
 
+Optional **file reflection** (checkboxes under the form; needs the server to run on the PC that owns the files, i.e. the local launcher, not EC2):
+```
+POST /api/order-form/reflect {order, targets:{invoice,marketing}, dry_run:true}  → plan (ok/skip/error per campus)
+User confirms in a modal → generate (download) → POST /api/order-form/reflect {dry_run:false}
+  processors/order_form/reflect.py → desktop_paths (find files) → workbook_io.safe_save (backup, verify, replace)
+```
+- 청구서: `<Desktop>/{YYYY}년 {MM}월 매출청구서_소모품/{YYYY}년 {MM}월 {수령자} 청구서_소모품.xlsx` → append a sheet at the **end**, named `MMDD` + first 제품명 with all spaces removed (제작 종류가 명함이면 `MMDD명함`, max 31 chars). Existing sheet of the same name → skip.
+- 마케팅팀: `<Desktop>/{YYYY}년 {MM}월 소모품 제작내역_Marketing팀.xlsx`, sheet `소모품출고내역`: find the campus block by the row-2 header, append below its last used row (일자·제품명·부수·페이지·단가, 금액 `=부수*단가` when 단가 given). No row insertion; same 일자+제품명+부수 → skip; not enough free rows → error.
+- Year/month/MMDD all come from the 납품서 납품일 (발주서 납기일자). Missing file/campus block → skip (never creates files).
+- Desktop resolution: 공통설정 `desktop_dir` > env `GROOBOOK_DESKTOP_DIR` > OS auto (Windows shell API, handles OneDrive-redirected Desktop). Names are compared ignoring spaces and in NFC (macOS stores Hangul as NFD).
+- Safety (`workbook_io.py`): refuses if `~$` lock file / not writable; backs up to `data/backups/` (last 30); saves to a temp file, **re-opens and compares** every pre-existing sheet (values, styles, merges, widths, images, external links) and only then `os.replace`s. openpyxl drops cached formula values and printer settings, so `fullCalcOnLoad` is set and Excel recalculates on open.
+- Edits made in Excel after download are NOT reflected; reflection uses the values typed in the form (hence the 단가 column).
+
 Modes: `order` (registered type), `blank_order` (빈 발주서, free-text spec), `blank_delivery` (빈 납품서, delivery sheet only). `order_type: multi` adds a per-campus distribution matrix → one 납품서 sheet per campus (`납품서_{캠퍼스}`), 발주수량 = column sums.
 
 ### State Management
@@ -117,7 +130,8 @@ All task state lives in two in-memory dicts in `main.py` (`tasks`, `email_scans`
 | `templates/order_form.html` + `static/js/order_form.js` | 발주서 작성 UI (state → render; combobox = `<input list>` + `<datalist>`) |
 | `templates/order_settings.html` + `static/js/order_settings.js` | Admin settings UI (types, options/defaults, messages, address book, export/import/reset) |
 | `static/js/order_common.js` | Shared helpers: combobox, confirm modal, toast, blob download |
-| `tests/` | pytest suite for 공통발주서 (compute, validation, naming, builder, settings store, API) |
+| `processors/order_form/desktop_paths.py` / `workbook_io.py` / `reflect.py` | Desktop & target-file lookup; safe in-place editing of existing xlsx; invoice-sheet / marketing-row reflection |
+| `tests/` | pytest suite for 공통발주서 (compute, validation, naming, builder, settings store, API, reflect); `tests/xlsx_fixtures.py` builds fake invoice/marketing workbooks, `sample/참조*.xlsx` tests run only when present |
 
 ## Excel Parsing Conventions
 
