@@ -61,6 +61,13 @@ class GenerateRequest(BaseModel):
     force: bool = False
 
 
+class QuoteRequest(BaseModel):
+    """입력 중인 발주서의 품목별 자동 단가 조회."""
+    model_config = ConfigDict(extra="ignore")
+
+    order: OrderRequest
+
+
 class ReflectRequest(BaseModel):
     """생성한 납품서를 바탕화면의 청구서·마케팅팀 엑셀에 반영 (dry_run=True 면 계획만)."""
     model_config = ConfigDict(extra="ignore")

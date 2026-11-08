@@ -185,3 +185,41 @@ def test_reflect_validation_error_and_no_targets(client, desk):
     body = _reflect_body(False)
     body["targets"] = {}
     assert client.post("/api/order-form/reflect", json=body).json() == {"items": []}
+
+
+def test_price_quote_returns_auto_manual_and_null_rows(client):
+    req = make_request(items=[
+        {"name": "A", "qty": "100", "mono": "100"},
+        {"name": "", "qty": ""},
+        {"name": "B", "qty": "10", "mono": "10", "unit_price": "999"},
+    ]).model_dump()
+    res = client.post("/api/order-form/price-quote", json={"order": req})
+    assert res.status_code == 200
+    items = res.json()["items"]
+    assert items[0] == {"status": "auto", "price": 100 * 30 + 600, "reason": ""}
+    assert items[1] is None
+    assert items[2]["status"] == "auto"            # 입력한 단가와 무관하게 자동값을 알려 준다 (화면에서 비교)
+
+
+def test_price_quote_works_with_incomplete_input_and_multi_total(client):
+    req = make_request(
+        job_no="", campus="", order_type="multi", spec={"binding_method": "무선제본", "inner_paper": "80g 미색모조",
+                                                          "inner_print": "양면 2도", "inner_size": "148*210"},
+        items=[{"name": "A", "qty": "", "mono": "10"}],
+        distribution=[{"campus": "평촌캠퍼스", "qtys": ["100"]}, {"campus": "분당캠퍼스", "qtys": ["50"]}],
+    ).model_dump()
+    items = client.post("/api/order-form/price-quote", json={"order": req}).json()["items"]
+    assert items[0]["price"] == 10 * 20 + 600
+
+
+def test_price_quote_manual_for_blank_order(client):
+    req = make_request(mode="blank_order", type_id=None, type_name="특수").model_dump()
+    items = client.post("/api/order-form/price-quote", json={"order": req}).json()["items"]
+    assert all(i["status"] == "manual" and i["reason"] for i in items)
+
+
+def test_generate_without_manual_price_returns_422(client):
+    req = make_request(type_id="certificate", items=[{"name": "상장", "qty": "10"}]).model_dump()
+    res = client.post("/api/order-form/generate", json={"order": req})
+    assert res.status_code == 422
+    assert [e["code"] for e in res.json()["errors"]] == ["PRICE_REQUIRED"]
