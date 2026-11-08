@@ -116,6 +116,39 @@ window.OF = (() => {
     });
   }
 
+  /**
+   * 여러 버튼 중 하나를 고르는 모달. items 는 {status, title, message, file} 목록.
+   * buttons: [{label, value, primary, disabled}]. 바깥 클릭/취소는 'cancel'.
+   */
+  const STATUS_LABEL = { ok: '예정', done: '완료', skip: '건너뜀', error: '불가' };
+  function planItemsHtml(items) {
+    return items.map(i => `<li class="issue ${esc(i.status)}" style="cursor:default;">
+        <span class="badge badge-${esc(i.status)}">${esc(STATUS_LABEL[i.status] || i.status)}</span>
+        <span><strong>${esc(i.title || '')}</strong> ${esc(i.message || '')}
+        ${i.file ? `<small style="display:block;opacity:.75;word-break:break-all;">${esc(i.file)}</small>` : ''}</span>
+      </li>`).join('');
+  }
+
+  function choiceDialog({ title, message = '', items = [], buttons }) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal-box">
+          <h3>${esc(title)}</h3>
+          ${message ? `<p class="modal-subtitle">${esc(message)}</p>` : ''}
+          ${items.length ? `<ul class="issue-list" style="margin-bottom:20px;">${planItemsHtml(items)}</ul>` : ''}
+          <div class="modal-actions">
+            ${buttons.map((b, k) => `<button class="${b.primary ? 'btn-primary' : 'btn-secondary'}" data-k="${k}" ${b.disabled ? 'disabled' : ''}>${esc(b.label)}</button>`).join('')}
+          </div>
+        </div>`;
+      const done = v => { overlay.remove(); resolve(v); };
+      overlay.querySelectorAll('[data-k]').forEach(el => el.addEventListener('click', () => done(buttons[Number(el.dataset.k)].value)));
+      overlay.addEventListener('click', e => { if (e.target === overlay) done('cancel'); });
+      document.body.appendChild(overlay);
+    });
+  }
+
   function uid(prefix = 'id') {
     return prefix + '_' + Math.random().toString(16).slice(2, 10);
   }
@@ -135,5 +168,5 @@ window.OF = (() => {
   }
 
   return { esc, fetchJson, postJson, filenameFromDisposition, downloadBlob, fillDatalist,
-           makeCombobox, debounce, toast, confirmDialog, uid, isBlank, parseInt0 };
+           makeCombobox, debounce, toast, confirmDialog, choiceDialog, planItemsHtml, uid, isBlank, parseInt0 };
 })();

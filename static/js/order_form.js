@@ -1,7 +1,7 @@
 /* 공통발주서 작성 페이지 */
 (() => {
   const { esc, fetchJson, postJson, filenameFromDisposition, downloadBlob, fillDatalist,
-          makeCombobox, debounce, toast, confirmDialog, uid, isBlank, parseInt0 } = OF;
+          makeCombobox, debounce, toast, confirmDialog, choiceDialog, planItemsHtml, uid, isBlank, parseInt0 } = OF;
   const $ = id => document.getElementById(id);
 
   const BLANK_ORDER_LABEL = '빈 발주서';
@@ -270,6 +270,7 @@
       { key: 'insert', label: '청간지', type: 'num' },
       { key: 'color', label: '4도', type: 'num' },
       { key: 'pagesCalc', label: '페이지합계', type: 'calc' },
+      { key: 'unitPrice', label: '단가', type: 'num' },
     ];
   }
 
@@ -665,6 +666,7 @@
     const btn = $('generateBtn');
     btn.disabled = true;
     hideResult();
+    let downloaded = false;
     try {
       const res = await postJson('/api/order-form/generate', { order: buildPayload(), force });
       if (res.status === 200) {
@@ -672,6 +674,7 @@
         const filename = filenameFromDisposition(res.headers.get('Content-Disposition')) || '발주서.xlsx';
         downloadBlob(blob, filename);
         showResult(filename);
+        downloaded = true;
       } else if (res.status === 409) {
         const data = await res.json();
         const ok = await confirmDialog({
@@ -680,7 +683,7 @@
           items: data.warnings || [],
           okText: '그래도 생성',
         });
-        if (ok) { await generate(true); return; }
+        if (ok) { downloaded = await generate(true); return downloaded; }
       } else if (res.status === 422) {
         const data = await res.json();
         state.serverIssues = [...(data.errors || []), ...(data.warnings || [])];
@@ -696,6 +699,85 @@
     } finally {
       validateAndRender();
     }
+    return downloaded;
+  }
+
+  // ───────────── 청구서·마케팅팀 파일 반영 ─────────────
+  const TARGET_LABEL = { invoice: '청구서', marketing: '마케팅팀' };
+  const toPlanItems = items => items.map(i => ({
+    status: i.status, title: `[${TARGET_LABEL[i.target] || i.target}] ${i.campus}`, message: i.message, file: i.file,
+  }));
+
+  function selectedTargets() {
+    return { invoice: $('reflectInvoice').checked, marketing: $('reflectMarketing').checked };
+  }
+
+  async function onGenerate() {
+    const targets = selectedTargets();
+    if (!targets.invoice && !targets.marketing) { await generate(false); return; }
+
+    $('generateBtn').disabled = true;
+    hideResult();
+    let plan;
+    try {
+      const res = await postJson('/api/order-form/reflect', { order: buildPayload(), targets, dry_run: true });
+      let data = {};
+      try { data = await res.json(); } catch { /* ignore */ }
+      if (res.status === 422) {
+        state.serverIssues = [...(data.errors || []), ...(data.warnings || [])];
+        validateAndRender();
+        showError(data.detail || '입력 오류가 있습니다. 검증 결과를 확인해 주세요.');
+        return;
+      }
+      if (!res.ok) { showError(data.detail || '파일 반영 계획을 확인하지 못했습니다.'); return; }
+      plan = data.items || [];
+    } catch (e) {
+      showError('서버 연결에 실패했습니다.');
+      return;
+    } finally {
+      validateAndRender();
+    }
+
+    const okCount = plan.filter(i => i.status === 'ok').length;
+    const choice = await choiceDialog({
+      title: '파일 반영 확인',
+      message: okCount
+        ? `엑셀 파일을 생성한 뒤 아래 ${okCount}건을 바탕화면 파일에 반영합니다. 반영 전 원본은 자동으로 백업됩니다.`
+        : '반영할 수 있는 항목이 없습니다. 엑셀 파일만 생성할 수 있습니다.',
+      items: toPlanItems(plan),
+      buttons: [
+        { label: '취소', value: 'cancel' },
+        { label: '파일만 생성', value: 'file' },
+        { label: '반영하고 생성', value: 'reflect', primary: true, disabled: okCount === 0 },
+      ],
+    });
+    if (choice !== 'file' && choice !== 'reflect') return;
+
+    const downloaded = await generate(false);
+    if (downloaded && choice === 'reflect') await applyReflect(targets);
+  }
+
+  async function applyReflect(targets) {
+    const box = $('reflectReport');
+    try {
+      const res = await postJson('/api/order-form/reflect', { order: buildPayload(), targets, dry_run: false });
+      const data = await res.json();
+      if (!res.ok) { box.innerHTML = planItemsHtml([{ status: 'error', title: '파일 반영', message: data.detail || '반영하지 못했습니다.' }]); return; }
+      box.innerHTML = planItemsHtml(toPlanItems(data.items || []));
+      if ((data.items || []).some(i => i.status === 'error')) toast('일부 파일에 반영하지 못했습니다. 결과를 확인해 주세요.', 'error');
+    } catch (e) {
+      box.innerHTML = planItemsHtml([{ status: 'error', title: '파일 반영', message: '서버 연결에 실패했습니다.' }]);
+    }
+  }
+
+  async function loadDesktopInfo() {
+    const { res, data } = await fetchJson('/api/order-form/desktop-info');
+    const el = $('desktopInfo');
+    if (!res.ok || !data) { el.textContent = ''; return; }
+    el.textContent = data.exists
+      ? `바탕화면 경로: ${data.desktop_dir}`
+      : `바탕화면 경로를 찾을 수 없습니다 (${data.desktop_dir}). 이 기능은 파일이 있는 PC에서 서버를 실행할 때만 쓸 수 있고, 경로는 공통설정에서 바꿀 수 있습니다.`;
+    el.style.color = data.exists ? '' : 'var(--danger)';
   }
 
   function showResult(filename) {
@@ -713,6 +795,7 @@
   }
 
   function hideResult() {
+    $('reflectReport').innerHTML = '';
     $('resultSection').style.display = 'none';
     $('errorSection').style.display = 'none';
   }
@@ -771,7 +854,7 @@
       const el = elementForPath(li.dataset.target);
       if (el && typeof el.focus === 'function') { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     });
-    $('generateBtn').addEventListener('click', () => generate(false));
+    $('generateBtn').addEventListener('click', onGenerate);
     $('resetBtn').addEventListener('click', async () => {
       if (hasUserContent() || state.campus || state.jobNo) {
         const ok = await confirmDialog({ title: '초기화', message: '입력한 내용을 모두 지웁니다. 계속할까요?', okText: '초기화', danger: true });
@@ -796,6 +879,7 @@
     buildSpecTable();
     bindStatic();
     resetState();
+    loadDesktopInfo();
   }
 
   init();

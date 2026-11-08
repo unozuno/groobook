@@ -1020,6 +1020,12 @@ header {
 
 .badge-error { background: var(--danger); color: #fff; }
 .badge-warning { background: var(--warning); color: #fff; }
+.badge-ok, .badge-done { background: var(--success); color: #fff; }
+.badge-skip { background: var(--text-faint); color: #fff; }
+.issue.ok, .issue.done { background: #f0fdf4; color: #166534; }
+.issue.skip { background: var(--surface-muted); color: var(--text-muted); }
+
+.reflect-report { width: 100%; text-align: left; margin-top: 4px; }
 
 .issue-empty {
   font-size: 13px;

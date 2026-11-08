@@ -348,6 +348,13 @@
   function renderMisc() {
     $('multiLabel').value = state.settings.multi_label;
     $('desktopDir').value = state.settings.desktop_dir || '';
+    showDesktopHint();
+  }
+
+  async function showDesktopHint() {
+    const { res, data } = await fetchJson('/api/order-form/desktop-info');
+    if (!res.ok || !data) return;
+    $('desktopHint').textContent = `현재 저장된 설정 기준 사용 경로: ${data.desktop_dir} (${data.exists ? '폴더 있음' : '폴더 없음'}, 결정 방법: ${data.source})`;
   }
 
   // ───────────── 탭 ─────────────
