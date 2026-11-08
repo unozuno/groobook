@@ -8,9 +8,11 @@
   5. 교체       : 검증을 통과했을 때만 os.replace 로 원본을 교체 (실패하면 원본은 건드리지 않음)
 """
 import os
+import re
 import shutil
 import uuid
 import zipfile
+from xml.etree import ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
@@ -176,15 +178,59 @@ def compare_snapshots(before: dict, after: dict, allowed: Optional[dict] = None,
 
 # ───────── 안전 저장 ─────────
 
+_NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_NS_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+
+def inject_cached_values(path: Path, values: dict) -> int:
+    """openpyxl 은 수식 셀의 계산값(캐시)을 비워 저장한다. 엑셀은 열 때 다시 계산하지만, 다시 계산하지 않는
+    프로그램(미리보기·Numbers·보호된 보기)에서는 0 이나 '-' 로 보인다. 우리가 값을 아는 수식 셀에 한해
+    계산값을 직접 채워 넣는다.  values: {시트명: {셀 좌표: 숫자}}  →  채운 셀 개수."""
+    if not values:
+        return 0
+    with zipfile.ZipFile(path) as zin:
+        files = {name: zin.read(name) for name in zin.namelist()}
+        infos = {i.filename: i for i in zin.infolist()}
+    wb_xml = ET.fromstring(files["xl/workbook.xml"])
+    rels = {r.get("Id"): r.get("Target") for r in ET.fromstring(files["xl/_rels/workbook.xml.rels"])}
+    sheet_files = {}
+    for sh in wb_xml.iter(f"{_NS_MAIN}sheet"):
+        target = rels.get(sh.get(f"{_NS_REL}id"), "")
+        sheet_files[sh.get("name")] = "xl/" + target.lstrip("/").removeprefix("xl/")
+    done = 0
+    for title, cells in values.items():
+        name = sheet_files.get(title)
+        if name not in files:
+            continue
+        xml = files[name].decode("utf-8")
+        for coord, number in cells.items():
+            if isinstance(number, bool) or not isinstance(number, (int, float)):
+                continue
+            pattern = re.compile(r'(<c r="%s"(?: [^>]*)?>\s*<f(?: [^>]*)?>[^<]*</f>)\s*(?:<v\s*/>|<v></v>)?(\s*</c>)' % re.escape(coord))
+            xml, n = pattern.subn(lambda m: f"{m.group(1)}<v>{number!r}</v>{m.group(2)}", xml, count=1)
+            done += n
+        files[name] = xml.encode("utf-8")
+    tmp = path.with_name(path.name + ".cache")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for fname, data in files.items():
+            zout.writestr(infos[fname], data, compress_type=zipfile.ZIP_DEFLATED)
+    os.replace(tmp, path)
+    return done
+
+
 def safe_save(wb, path: Path, before: dict, allowed: Optional[dict] = None,
-              new_sheets: Optional[list] = None, expected: Optional[dict] = None) -> Path:
-    """검증을 통과했을 때만 원본을 교체한다. 백업 파일 경로를 돌려준다."""
+              new_sheets: Optional[list] = None, expected: Optional[dict] = None,
+              cached: Optional[dict] = None) -> Path:
+    """검증을 통과했을 때만 원본을 교체한다. 백업 파일 경로를 돌려준다.
+    cached: {시트명: {셀: 숫자}} — 새로 쓴 수식 셀의 계산값 (inject_cached_values 참고)."""
     check_writable(path)
     backup = backup_file(path)
     wb.calculation.fullCalcOnLoad = True
     tmp = path.with_name(f".groobook-{uuid.uuid4().hex[:8]}.tmp.xlsx")
     try:
         wb.save(tmp)
+        if cached:
+            inject_cached_values(tmp, cached)
         reloaded = open_workbook(tmp)
         try:
             problems = compare_snapshots(before, snapshot(reloaded), allowed, new_sheets, expected)

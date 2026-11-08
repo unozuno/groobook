@@ -98,3 +98,21 @@ def test_safe_save_blocked_by_lock_and_replace_failure(tmp_path, monkeypatch):
         wio.safe_save(wb, f, snap)
     assert f.read_bytes() == before
     assert not list(tmp_path.glob(".groobook-*"))
+
+
+def test_inject_cached_values_keeps_formulas_and_ignores_unknown_targets(tmp_path):
+    from openpyxl import Workbook, load_workbook
+    p = tmp_path / "c.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "견적서"
+    wb.create_sheet("1117l자화일")
+    ws["G13"] = "='1117l자화일'!C19"
+    ws["K13"] = "=SUM(1,2)"
+    ws["A1"] = "텍스트"
+    wb.save(p)
+    n = wio.inject_cached_values(p, {"견적서": {"G13": 10, "K13": 5000.5, "A1": 3, "Z9": 1}, "없는시트": {"A1": 1}})
+    assert n == 2                                            # 수식이 아닌 셀·없는 셀·없는 시트는 건너뜀
+    data = load_workbook(p, data_only=True)["견적서"]
+    assert (data["G13"].value, data["K13"].value, data["A1"].value) == (10, 5000.5, "텍스트")
+    assert load_workbook(p)["견적서"]["G13"].value == "='1117l자화일'!C19"

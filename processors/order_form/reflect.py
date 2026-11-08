@@ -22,7 +22,7 @@ from processors.order_form import estimate_sheet as es
 from processors.order_form import workbook_io as wio
 from processors.order_form.models import DeliveryNote, Order
 from processors.order_form.naming import SHEET_NAME_MAX, sanitize_sheet_name
-from processors.order_form.xlsx_builder import delivery_total_row, write_delivery_sheet
+from processors.order_form.xlsx_builder import DELIV_FIRST_ITEM_ROW, delivery_total_row, write_delivery_sheet
 
 INVOICE = "invoice"
 MARKETING = "marketing"
@@ -66,6 +66,16 @@ def invoice_sheet_name(order: Order, note: DeliveryNote, due: date) -> str:
 
 
 # ───────── 청구서 ─────────
+
+def _delivery_values(note: DeliveryNote) -> tuple[list[Optional[int]], int, int]:
+    """납품서 시트의 계산 결과: (줄별 공급액 — 수식이 "" 를 내는 줄은 None, 총수량, 총 공급액).
+    공급액 수식 `=IF(AND(C>0,E<>""),C*E,"")` 과 같은 규칙이다."""
+    amounts: list[Optional[int]] = []
+    for i, line in enumerate(note.lines):
+        price = note.unit_prices[i] if i < len(note.unit_prices) else None
+        amounts.append(line.qty * price if line.qty and price is not None else None)
+    return amounts, sum(l.qty or 0 for l in note.lines), sum(a for a in amounts if a is not None)
+
 
 def _reflect_invoice(order: Order, desktop: Path, due: date, dry_run: bool, out: ReflectResult) -> None:
     for note in order.deliveries:
@@ -117,11 +127,16 @@ def _reflect_invoice(order: Order, desktop: Path, due: date, dry_run: bool, out:
                 row = es.insert_item_row(est, layout)
                 layout = es.find_layout(est)
                 expected = {es.ESTIMATE_SHEET: es.expected_after_insert(row, es.row_merges(est, row))}
-            es.write_item_row(est, layout, row, note.lines[0].item.name, sheet,
-                              delivery_total_row(len(note.lines)), due.month, due.day)
+            total_row = delivery_total_row(len(note.lines))
+            es.write_item_row(est, layout, row, note.lines[0].item.name, sheet, total_row, due.month, due.day)
+            # 엑셀 밖(미리보기 등)에서도 0 이 아닌 값이 보이도록 새로 쓴 수식의 계산값을 함께 기록한다
+            amounts, qty_total, amount_total = _delivery_values(note)
+            sheet_cached = {f"F{DELIV_FIRST_ITEM_ROW + i}": a for i, a in enumerate(amounts) if a is not None}
+            sheet_cached.update({f"C{total_row}": qty_total, f"F{total_row}": amount_total})
+            cached = {sheet: sheet_cached, es.ESTIMATE_SHEET: {f"G{row}": qty_total, f"K{row}": amount_total}}
             try:
                 backup = wio.safe_save(wb, path, snap, allowed={es.ESTIMATE_SHEET: es.row_coords(layout, row)},
-                                       new_sheets=[sheet], expected=expected)
+                                       new_sheets=[sheet], expected=expected, cached=cached)
             except wio.WorkbookIOError as e:
                 out.items.append(ReflectItem(INVOICE, note.campus, "error", str(e), str(path), sheet))
                 continue
@@ -191,8 +206,10 @@ def _marketing_plan(ws, note: DeliveryNote, due: date) -> tuple[str, str, Option
     return "ok", "", c0, start, need
 
 
-def _write_marketing_rows(ws, note: DeliveryNote, due: date, c0: int, start: int) -> set[str]:
+def _write_marketing_rows(ws, note: DeliveryNote, due: date, c0: int, start: int) -> tuple[set[str], dict]:
+    """입력한 셀 좌표와, 금액 수식 셀의 계산값({좌표: 값})을 돌려준다."""
     written: set[str] = set()
+    cached: dict[str, int] = {}
     when = datetime(due.year, due.month, due.day)
     for i, line in enumerate(note.lines):
         r = start + i
@@ -208,9 +225,12 @@ def _write_marketing_rows(ws, note: DeliveryNote, due: date, c0: int, start: int
             date_cell.number_format = 'mm"월"\\ dd"일"'
         amount = ws.cell(r, c0 + 5)
         qty_col, price_col = L(c0 + 2), L(c0 + 4)
-        amount.value = f"={qty_col}{r}*{price_col}{r}" if (price is not None and line.qty) else None
+        has_amount = price is not None and line.qty
+        amount.value = f"={qty_col}{r}*{price_col}{r}" if has_amount else None
+        if has_amount:
+            cached[amount.coordinate] = line.qty * price
         written.add(amount.coordinate)
-    return written
+    return written, cached
 
 
 def _reflect_marketing(order: Order, desktop: Path, due: date, dry_run: bool, out: ReflectResult) -> None:
@@ -237,6 +257,7 @@ def _reflect_marketing(order: Order, desktop: Path, due: date, dry_run: bool, ou
         ws = wb[MARKETING_SHEET]
         snap = wio.snapshot(wb)
         allowed: set[str] = set()
+        cached: dict[str, int] = {}
         pending: list[ReflectItem] = []
         for note in order.deliveries:
             status, msg, c0, start, need = _marketing_plan(ws, note, due)
@@ -248,14 +269,17 @@ def _reflect_marketing(order: Order, desktop: Path, due: date, dry_run: bool, ou
                 out.items.append(ReflectItem(MARKETING, note.campus, "ok",
                                              f"'{note.campus}' 구역 {span}에 {need}건을 입력합니다.", str(path), span))
                 continue
-            allowed |= _write_marketing_rows(ws, note, due, c0, start)
+            written, amount_values = _write_marketing_rows(ws, note, due, c0, start)
+            allowed |= written
+            cached.update(amount_values)
             item = ReflectItem(MARKETING, note.campus, "done",
                                f"'{note.campus}' 구역 {span}에 {need}건을 입력했습니다.", str(path), span)
             out.items.append(item)
             pending.append(item)
         if pending:
             try:
-                backup = wio.safe_save(wb, path, snap, allowed={MARKETING_SHEET: allowed})
+                backup = wio.safe_save(wb, path, snap, allowed={MARKETING_SHEET: allowed},
+                                       cached={MARKETING_SHEET: cached})
             except wio.WorkbookIOError as e:
                 for item in pending:
                     item.status, item.message = "error", str(e)

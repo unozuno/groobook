@@ -224,6 +224,49 @@ def test_estimate_shift_mismatch_is_rejected(make_order, desk, monkeypatch):
     assert invoice_path(desk).read_bytes() == raw
 
 
+# ───────── 계산값(캐시) 기록 ─────────
+
+def values(desk, sheet, campus="분당캠퍼스"):
+    return load_workbook(invoice_path(desk, campus), data_only=True)[sheet]
+
+
+def test_invoice_writes_cached_values_next_to_formulas(make_order, desk):
+    run(order_for(make_order), desk, targets=("invoice",))
+    sheet = values(desk, "1127교재상품권난수")
+    assert [sheet["F9"].value, sheet["F10"].value] == [250000, 330000]          # 둘째 줄은 단가표 자동 단가 660
+    assert (sheet["C19"].value, sheet["F19"].value) == (1500, 580000)
+    est = values(desk, "견적서")
+    assert (est["G14"].value, est["K14"].value) == (1500, 580000)
+    assert load_workbook(invoice_path(desk))["견적서"]["G14"].value == "='1127교재상품권난수'!C19"   # 수식은 그대로
+
+
+def test_blank_delivery_values_reach_estimate(make_order, desk):
+    order = make_order(mode="blank_delivery", order_type="single", type_id=None, campus="분당캠퍼스", due_date=DUE,
+                       items=[{"name": "대봉투", "qty": "100"}, {"name": "엘자화일", "qty": "40", "unit_price": "300"}])
+    assert [i.status for i in run(order, desk, targets=("invoice",))] == ["done"]
+    est = values(desk, "견적서")
+    assert (est["D14"].value, est["G14"].value, est["K14"].value) == ("대봉투", 140, 100 * 200 + 40 * 300)
+
+
+def test_cached_values_survive_row_insertion(make_order, tmp_path):
+    desk = make_desktop(tmp_path / "d")
+    wb = load_workbook(invoice_path(desk))
+    for r in range(14, 23):
+        wb["견적서"][f"B{r}"], wb["견적서"][f"D{r}"] = "소모품", f"x{r}"
+    wb.save(invoice_path(desk))
+    run(order_for(make_order), desk, targets=("invoice",))
+    est = values(desk, "견적서")
+    assert (est["G23"].value, est["K23"].value) == (1500, 580000)
+
+
+def test_marketing_amount_has_cached_value(make_order, desk):
+    run(order_for(make_order), desk, targets=("marketing",))
+    ws = load_workbook(marketing_path(desk), data_only=True)["소모품출고내역"]
+    c0 = 1 + 2 * 6
+    assert ws.cell(DATA_FIRST, c0 + 5).value == 1000 * 250
+    assert ws.cell(DATA_FIRST + 1, c0 + 5).value == 500 * 660
+
+
 # ───────── 마케팅팀 ─────────
 
 def test_marketing_rows_appended(make_order, desk):

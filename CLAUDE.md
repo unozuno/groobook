@@ -91,24 +91,25 @@ POST /api/order-form/reflect {order, targets:{invoice,marketing}, dry_run:true} 
 User confirms in a modal → generate (download) → POST /api/order-form/reflect {dry_run:false}
   processors/order_form/reflect.py → desktop_paths (find files) → workbook_io.safe_save (backup, verify, replace)
 ```
-- 청구서: `<Desktop>/{YYYY}년 {MM}월 매출청구서_소모품/{YYYY}년 {MM}월 {수령자} 청구서_소모품.xlsx` → append a sheet at the **end**, named `MMDD` + first 제품명 with all spaces removed (제작 종류가 명함이면 `MMDD명함`, max 31 chars). Existing sheet of the same name → skip.
+- 청구서: `<Desktop>/{YYYY}년 {MM}월 매출청구서_소모품/{YYYY}년 {MM}월 {납품학원} 청구서_소모품.xlsx` → append a sheet at the **end**, named `MMDD` + first 제품명 with all spaces removed (제작 종류가 명함이면 `MMDD명함`, max 31 chars). Existing sheet of the same name → skip.
   - Same save also adds one line to sheet 1 `견적서` (`estimate_sheet.py`): 품목 `소모품`, 적요 = the new sheet's first 제품명, 페이지·단가 blank, 수량 `='시트명'!C{합계행}`, 금액 `='시트명'!F{합계행}` (합계행 = `xlsx_builder.delivery_total_row`), 비고 `M/D 납품` (no zero padding, e.g. `10/8 납품`).
   - Line position: the 견적서 frame is found by the 머리글 row (품목·적요·수량·금액·비고) down to the first full-width merged separator row. First empty line (품목·적요·수량·금액 all blank) is used; when none is left a row is **inserted** at the separator (cells/merges/row heights/print area/in-sheet formulas are shifted by our own code because openpyxl's `insert_rows` moves none of those; ranges ending right above the separator grow). Formulas on other sheets pointing at 견적서 are not handled.
   - If the 견적서 sheet/frame is not recognized → that campus is an `error` and nothing is written (sheet and 견적서 stay consistent). Safe-save compares the shifted 견적서 against the expected shifted snapshot (`compare_snapshots(expected=…)`).
 - 마케팅팀: `<Desktop>/{YYYY}년 {MM}월 소모품 제작내역_Marketing팀.xlsx`, sheet `소모품출고내역`: find the campus block by the row-2 header, append below its last used row (일자·제품명·부수·페이지·단가, 금액 `=부수*단가` when 단가 given). No row insertion; same 일자+제품명+부수 → skip; not enough free rows → error.
 - Year/month/MMDD all come from the 납품서 납품일 (발주서 납기일자). Missing file/campus block → skip (never creates files).
 - Desktop resolution: 공통설정 `desktop_dir` > env `GROOBOOK_DESKTOP_DIR` > OS auto (Windows shell API, handles OneDrive-redirected Desktop). Names are compared ignoring spaces and in NFC (macOS stores Hangul as NFD).
+- Cached values: openpyxl saves formulas without their calculated result, so viewers that do not recalculate (Quick Look, Numbers, Protected View) show 0/`-` in accounting format. For formula cells we write ourselves (new 납품서 sheet line amounts/totals, 견적서 수량·금액, 마케팅팀 금액) `safe_save(cached=…)` → `inject_cached_values` patches the sheet XML with the known result. Other formulas in the file (e.g. 견적서 합계) still rely on Excel recalculating (`fullCalcOnLoad`).
 - Safety (`workbook_io.py`): refuses if `~$` lock file / not writable; backs up to `data/backups/` (last 30); saves to a temp file, **re-opens and compares** every pre-existing sheet (values, styles, merges, widths, images, external links) and only then `os.replace`s. openpyxl drops cached formula values and printer settings, so `fullCalcOnLoad` is set and Excel recalculates on open.
 - Edits made in Excel after download are NOT reflected; reflection uses the values typed in the form (hence the 단가 column) plus the auto 단가 below.
 
 **단가표 (unit price table)** — `settings.price_rules`, seeded from `processors/order_form/seed_prices.py` (the `단가표` sheet of `sample/발주서 단일화.xlsx`, rows 3–100; the 납품명세서 block from row 102 is NOT included) and edited in 공통설정 → 단가표 tab:
 - A rule = 제작 종류 (`type_id`) + `when` (spec field → allowed values; empty = any; list = any of) + total 발주수량 range (`qty_min/max`) + exact 페이지합계 (`pages`) + `price` (`fixed` amount, `per_page` = 페이지합계×rate+base, or `None` = 직접 입력). **First matching rule wins**, so order matters. Spec values are compared with all whitespace removed (`200 스노우` == `200스노우`).
 - Multi orders use the column-sum 발주수량 for tiers; one 단가 per 교재 for every campus 납품서.
-- Precedence per 납품서 line: typed 단가 > auto 단가 > blank. If there is no auto 단가 (상장·초대장 계열, 빈 발주서/빈 납품서, combination not in the table) and the 단가 is blank while qty > 0 → error `PRICE_REQUIRED` (mirrored in `order_form.js`, which gets the auto value from `POST /api/order-form/price-quote`; the rule engine itself is NOT duplicated in JS).
-- **빈 납품서(납품명세서)**: rows 104–120 of the 단가표 sheet are seeded as rules with the reserved `type_id: "delivery"` (제품명 `product` + 수령자 `campuses`, `price` fixed or `None`). Match = same 제품명 (spaces ignored) and 수령자 in `campuses` (empty = everyone); **first match wins**, so campus-specific lines (비닐봉투 → 대치·하남·송파크레오 300, 엘자화일 → 대치·하남·송파크레오·키비즈 500) sit above the general ones. 고3 모의고사 대봉투 / 고2 봉투모의고사 대봉투 (blue cells) and unknown products → 직접 입력 필수. `blank_order` stays always manual. Edited in 공통설정 → 단가표 → '납품명세서 (빈 납품서)'; the 빈 납품서 제품명 input suggests these product names (`dl-products`). Settings schema is v3 (v2 files get the delivery rules added on load).
+- Precedence per 납품서 line: typed 단가 > auto 단가 > blank. If there is no auto 단가 (상장·초대장 계열, 빈 발주서/납품서 모드, combination not in the table) and the 단가 is blank while qty > 0 → error `PRICE_REQUIRED` (mirrored in `order_form.js`, which gets the auto value from `POST /api/order-form/price-quote`; the rule engine itself is NOT duplicated in JS).
+- **납품서 모드 (UI label '납품서', mode `blank_delivery`; formerly 빈 납품서/납품명세서)**: rows 104–120 of the 단가표 sheet are seeded as rules with the reserved `type_id: "delivery"` (제품명 `product` + 납품학원 `campuses`, `price` fixed or `None`). Match = same 제품명 (spaces ignored) and 납품학원 in `campuses` (empty = every 납품학원); **first match wins**, so campus-specific lines (비닐봉투 → 대치·하남·송파크레오 300, 엘자화일 → 대치·하남·송파크레오·키비즈 500) sit above the general ones. 고3 모의고사 대봉투 / 고2 봉투모의고사 대봉투 (blue cells) and unknown products → 직접 입력 필수. `blank_order` stays always manual. Edited in 공통설정 → 단가표 → '납품서'; the 납품서 제품명 input suggests these product names (`dl-products`). Settings schema is v3 (v2 files get the delivery rules added on load).
 - Deleting a 제작 종류 drops its rules on save (`delivery` rules are kept); a settings file without the `price_rules` key is seeded on load (an explicit `[]` is respected).
 
-Modes: `order` (registered type), `blank_order` (빈 발주서, free-text spec), `blank_delivery` (빈 납품서, delivery sheet only). `order_type: multi` adds a per-campus distribution matrix → one 납품서 sheet per campus (`납품서_{캠퍼스}`), 발주수량 = column sums.
+Modes: `order` (registered type), `blank_order` (빈 발주서, free-text spec), `blank_delivery` (UI '납품서', delivery sheet only; the 납품학원 field is always called 납품학원, not 수령자). `order_type: multi` adds a per-campus distribution matrix → one 납품서 sheet per campus (`납품서_{캠퍼스}`), 발주수량 = column sums.
 
 ### State Management
 
@@ -157,9 +158,9 @@ All task state lives in two in-memory dicts in `main.py` (`tasks`, `email_scans`
 - Output deviations from the sample (intentional): no yellow input-cell fills (white; only the green header row keeps a fill); 표지 row has 사이즈/코팅/동판 in E7/F7/G7; row 9 = 생산처 전달사항 (red, bold 14, merged B9:J9); 페이지합계 I column is a formula; the `/8000` cell is omitted; 공급액 = `=IF(AND(C>0,E<>""),C*E,"")`; no external links.
 - Item rows: minimum 10, grows with items; totals row formulas follow. Numeric blanks are written as `None`, never 0.
 - 간지/표지 사이즈 follow 내지 사이즈 **only when that type's default is `null`** (the sample's `=I2` exists for 교재 only).
-- Filenames: `{YYMMDD 오늘, Asia/Seoul} 그루북 {학원|다중이름} {종류}발주.xlsx`; 빈 납품서: `… {수령자} 납품서.xlsx`. Sheet names sanitized to Excel rules (31 chars, no `\ / ? * [ ] :`) and de-duplicated with ` (2)`.
+- Filenames: `{YYMMDD 오늘, Asia/Seoul} 그루북 {학원|다중이름} {종류}발주.xlsx`; 납품서 mode: `… {납품학원} 납품서.xlsx`. Sheet names sanitized to Excel rules (31 chars, no `\ / ? * [ ] :`) and de-duplicated with ` (2)`.
 - Validation codes (`validation.py`) are mirrored in `order_form.js` — change both together.
-- 빈 발주서 / 빈 납품서 are fixed **modes**, not editable types; 졸업장/엽서 are independent copies of 상장/초대장 in the seed.
+- 빈 발주서 / 납품서 are fixed **modes**, not editable types; 졸업장/엽서 are independent copies of 상장/초대장 in the seed.
 
 ## Git & Commit Guidelines
 
