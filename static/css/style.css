@@ -161,7 +161,6 @@ a { text-decoration: none; color: inherit; }
 
 .container-narrow {
   max-width: 640px;
-  margin: 0;
 }
 
 /* ── 페이지 헤더 ── */
@@ -169,15 +168,6 @@ header {
   margin-bottom: 28px;
   text-align: left;
 }
-
-.back-btn {
-  display: inline-block;
-  margin-bottom: 10px;
-  font-size: 13px;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-.back-btn:hover { color: var(--primary); }
 
 .logo {
   font-size: 24px;
