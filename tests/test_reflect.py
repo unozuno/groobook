@@ -126,6 +126,104 @@ def test_blank_delivery_mode_reflects(make_order, desk):
     assert [i.status for i in items] == ["done", "done"]
 
 
+# ───────── 청구서: 견적서 줄 ─────────
+
+def est(desk, campus="분당캠퍼스"):
+    return load_workbook(invoice_path(desk, campus))["견적서"]
+
+
+def test_estimate_gets_one_line_for_new_sheet(make_order, desk):
+    items = run(order_for(make_order), desk, targets=("invoice",))
+    assert items[0].status == "done" and "견적서 14행에 한 줄을 추가" in items[0].message
+    ws = est(desk)
+    assert [ws[f"{c}14"].value for c in "BDFGIKN"] == [
+        "소모품", "교재 상품권 난수", None, "='1127교재상품권난수'!C19", None, "='1127교재상품권난수'!F19", "11/27 납품"]
+    assert ws["B13"].value == "소모품" and ws["D13"].value == "기존 제품 1"     # 기존 줄 그대로
+    assert ws["I28"].value == "=SUM(K13:M22)" and ws["J10"].value == "=SUM(G13:H22)"   # 삽입 없음 → 수식 불변
+
+
+def test_estimate_formula_targets_delivery_total_row(make_order, desk):
+    run(order_for(make_order), desk, targets=("invoice",))
+    wb = load_workbook(invoice_path(desk))
+    assert wb["1127교재상품권난수"]["C19"].value == "=SUM(C9:C18)" and wb["1127교재상품권난수"]["F19"].value == "=SUM(F9:F18)"
+    many = [{"name": f"제품{i}", "qty": "1", "unit_price": "1"} for i in range(12)]
+    run(order_for(make_order, items=many, due_date="2026-11-28"), desk, targets=("invoice",))
+    ws = est(desk)
+    assert ws["G15"].value == "='1128제품0'!C21" and ws["K15"].value == "='1128제품0'!F21"     # 12줄이면 합계 행 21
+
+
+def test_second_sheet_uses_next_free_line_and_date_note_has_no_zero_padding(make_order, desk):
+    run(order_for(make_order), desk, targets=("invoice",))
+    run(order_for(make_order, due_date="2026-12-03", items=[{"name": "다른 제품", "qty": "5", "unit_price": "10"}]),
+        make_desktop(desk, month=12, invoice_campuses=("분당캠퍼스",), with_marketing=False), targets=("invoice",))
+    ws = load_workbook(invoice_path(desk).parent.parent / "2026년 12월 매출청구서_소모품" / "2026년 12월 분당캠퍼스 청구서_소모품.xlsx")["견적서"]
+    assert ws["N14"].value == "12/3 납품" and ws["D14"].value == "다른 제품"
+
+
+def test_estimate_line_inserted_when_full(make_order, tmp_path):
+    from xlsx_fixtures import build_estimate
+    desk = make_desktop(tmp_path / "d")
+    wb = load_workbook(invoice_path(desk))
+    ws = wb["견적서"]
+    for r in range(14, 23):
+        ws[f"B{r}"], ws[f"D{r}"] = "소모품", f"채움{r}"
+    wb.save(invoice_path(desk))
+
+    items = run(order_for(make_order), desk, targets=("invoice",))
+    assert items[0].status == "done" and "줄을 삽입해 한 줄을 추가" in items[0].message, items[0].message
+    ws = est(desk)
+    assert ws["D23"].value == "교재 상품권 난수" and ws["G23"].value == "='1127교재상품권난수'!C19"
+    assert ws["D25"].value == "표  지" and ws["D29"].value == "공 급 가"                    # 아래가 한 줄씩 내려감
+    assert ws["I29"].value == "=SUM(K13:M23)" and ws["J10"].value == "=SUM(G13:H23)"
+    assert ws["K31"].value == "=SUM(K29:M30)" and ws["M10"].value == "=K31"
+    merges = {str(r) for r in ws.merged_cells.ranges}
+    assert {"B24:O24", "K23:M23", "B32:O36"} <= merges
+    assert len(ws._images) == 1 and ws.print_area.endswith("$O$36")
+    assert load_workbook(invoice_path(desk)).sheetnames[-1] == "1127교재상품권난수"
+
+
+def test_estimate_dry_run_reports_free_or_insert(make_order, desk):
+    items = run(order_for(make_order), desk, targets=("invoice",), dry_run=True)
+    assert items[0].message == "맨 끝에 '1127교재상품권난수' 시트를 추가하고, 견적서 14행에 한 줄을 추가합니다."
+
+
+def test_skipped_duplicate_sheet_leaves_estimate_untouched(make_order, desk):
+    run(order_for(make_order), desk, targets=("invoice",))
+    before = est(desk)["D15"].value
+    assert run(order_for(make_order), desk, targets=("invoice",))[0].status == "skip"
+    assert est(desk)["D15"].value == before is None
+
+
+def test_missing_estimate_structure_is_error_and_file_untouched(make_order, desk):
+    wb = load_workbook(invoice_path(desk))
+    wb["견적서"]["B12"] = "다른 제목"
+    wb.save(invoice_path(desk))
+    raw = invoice_path(desk).read_bytes()
+    items = run(order_for(make_order), desk, targets=("invoice",))
+    assert items[0].status == "error" and "견적서 구조" in items[0].message
+    assert invoice_path(desk).read_bytes() == raw
+
+
+def test_estimate_shift_mismatch_is_rejected(make_order, desk, monkeypatch):
+    """삽입 결과가 기대와 다르면(예: 수식 이동 버그) 저장하지 않고 원본을 그대로 둔다."""
+    from processors.order_form import estimate_sheet as es
+    wb = load_workbook(invoice_path(desk))
+    for r in range(14, 23):
+        wb["견적서"][f"B{r}"], wb["견적서"][f"D{r}"] = "소모품", f"x{r}"
+    wb.save(invoice_path(desk))
+    raw = invoice_path(desk).read_bytes()
+    orig_insert = es.insert_item_row
+
+    def broken(ws, layout):
+        row = orig_insert(ws, layout)
+        ws["K29"].value = "=I28"                      # 한 줄 어긋난 수식 (올바른 값은 =I29)
+        return row
+    monkeypatch.setattr(es, "insert_item_row", broken)
+    items = run(order_for(make_order), desk, targets=("invoice",))
+    assert items[0].status == "error" and "검증에 실패" in items[0].message
+    assert invoice_path(desk).read_bytes() == raw
+
+
 # ───────── 마케팅팀 ─────────
 
 def test_marketing_rows_appended(make_order, desk):
@@ -227,6 +325,8 @@ def test_real_reference_files_roundtrip(make_order, tmp_path):
     inv = load_workbook(invoice_path(desk))
     assert len(inv.sheetnames) == n_sheets + 1 and inv.sheetnames[-1] == "1127교재상품권난수"
     assert len(inv["견적서"]._images) == 1 and len(inv._external_links) == n_links
+    assert inv["견적서"]["D21"].value == "교재 상품권 난수" and inv["견적서"]["N21"].value == "11/27 납품"   # 참조1 의 첫 빈 줄
+    assert inv["견적서"]["G21"].value == "='1127교재상품권난수'!C19" and inv["견적서"]["I28"].value == "=SUM(K13:M22)"
     mk = load_workbook(marketing_path(desk))["소모품출고내역"]
     assert mk["AF7"].value == "교재 상품권 난수" and mk["AG7"].value == 1000       # 분당캠퍼스 구역(AE~AJ)
     assert mk["AG48"].value == "=SUM(AG4:AG47)"

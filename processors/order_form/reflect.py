@@ -1,6 +1,7 @@
 """생성한 납품서를 바탕화면의 두 엑셀 파일에 반영한다.
 
-1. 청구서   : {연}년 {월}월 매출청구서_소모품/{연}년 {월}월 {학원} 청구서_소모품.xlsx 의 맨 끝에 납품서 시트 추가
+1. 청구서   : {연}년 {월}월 매출청구서_소모품/{연}년 {월}월 {학원} 청구서_소모품.xlsx 의 맨 끝에 납품서 시트를 추가하고,
+              1번 시트 '견적서' 에 그 시트를 가리키는 품목 줄 한 줄을 추가(빈 줄이 없으면 줄 삽입)
 2. 마케팅팀 : {연}년 {월}월 소모품 제작내역_Marketing팀.xlsx 의 '소모품출고내역' 에서 학원 구역 아래 빈 행에 품목 입력
 
 - 연·월·시트명 MMDD 는 모두 납품서의 납품일(발주서 납기일자) 기준이다.
@@ -17,10 +18,11 @@ from typing import Optional
 from openpyxl.utils import get_column_letter as L
 
 from processors.order_form import desktop_paths as dp
+from processors.order_form import estimate_sheet as es
 from processors.order_form import workbook_io as wio
 from processors.order_form.models import DeliveryNote, Order
 from processors.order_form.naming import SHEET_NAME_MAX, sanitize_sheet_name
-from processors.order_form.xlsx_builder import write_delivery_sheet
+from processors.order_form.xlsx_builder import delivery_total_row, write_delivery_sheet
 
 INVOICE = "invoice"
 MARKETING = "marketing"
@@ -87,20 +89,45 @@ def _reflect_invoice(order: Order, desktop: Path, due: date, dry_run: bool, out:
                                              f"같은 이름의 시트 '{sheet}' 이(가) 이미 있어 건너뜁니다.",
                                              str(path), sheet))
                 continue
+            # 시트와 견적서가 어긋나지 않도록 견적서 틀부터 확인한다 (못 찾으면 아무것도 바꾸지 않음)
+            try:
+                if es.ESTIMATE_SHEET not in wb.sheetnames:
+                    raise es.EstimateError(f"'{es.ESTIMATE_SHEET}' 시트를 찾지 못했습니다.")
+                est = wb[es.ESTIMATE_SHEET]
+                layout = es.find_layout(est)
+            except es.EstimateError as e:
+                out.items.append(ReflectItem(INVOICE, note.campus, "error",
+                                             f"견적서 구조를 확인하지 못해 반영하지 않았습니다. ({e})",
+                                             str(path), sheet))
+                continue
+            free = es.find_free_row(est, layout)
+            row = free if free is not None else layout.separator
+            how = "한 줄을 추가" if free is not None else "줄을 삽입해 한 줄을 추가"
             if dry_run:
                 out.items.append(ReflectItem(INVOICE, note.campus, "ok",
-                                             f"맨 끝에 '{sheet}' 시트를 추가합니다.", str(path), sheet))
+                                             f"맨 끝에 '{sheet}' 시트를 추가하고, 견적서 {row}행에 {how}합니다.",
+                                             str(path), sheet))
                 continue
+
             snap = wio.snapshot(wb)
             ws = wb.create_sheet(sheet)
             write_delivery_sheet(ws, order, note)
+            expected = None
+            if free is None:
+                row = es.insert_item_row(est, layout)
+                layout = es.find_layout(est)
+                expected = {es.ESTIMATE_SHEET: es.expected_after_insert(row, es.row_merges(est, row))}
+            es.write_item_row(est, layout, row, note.lines[0].item.name, sheet,
+                              delivery_total_row(len(note.lines)), due.month, due.day)
             try:
-                backup = wio.safe_save(wb, path, snap, new_sheets=[sheet])
+                backup = wio.safe_save(wb, path, snap, allowed={es.ESTIMATE_SHEET: es.row_coords(layout, row)},
+                                       new_sheets=[sheet], expected=expected)
             except wio.WorkbookIOError as e:
                 out.items.append(ReflectItem(INVOICE, note.campus, "error", str(e), str(path), sheet))
                 continue
             out.items.append(ReflectItem(INVOICE, note.campus, "done",
-                                         f"맨 끝에 '{sheet}' 시트를 추가했습니다.", str(path), sheet, str(backup)))
+                                         f"맨 끝에 '{sheet}' 시트를 추가하고, 견적서 {row}행에 {how}했습니다.",
+                                         str(path), sheet, str(backup)))
         finally:
             wb.close()
 
