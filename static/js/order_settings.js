@@ -1,4 +1,4 @@
-/* 발주서 설정(관리자) 페이지 */
+/* 공통설정(관리자) 페이지 */
 (() => {
   const { esc, fetchJson, postJson, toast, confirmDialog, uid, isBlank } = OF;
   const $ = id => document.getElementById(id);

@@ -1,5 +1,5 @@
 <aside class="sidebar">
-  <a href="/" class="sidebar-brand">
+  <a href="/order-settings" class="sidebar-brand{% if active == 'order_settings' %} active{% endif %}" title="공통설정">
     <span class="brand-mark">G</span>
     <span class="brand-text">
       <span class="brand-name">그루북</span>
@@ -27,10 +27,6 @@
     <a href="/order-form" class="nav-item{% if active == 'order_form' %} active{% endif %}">
       <svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v14H5V6h3z"/><path d="M9 4v2h6V4"/><path d="M8 11h8M8 15h5"/></svg>
       공통발주서
-    </a>
-    <a href="/order-settings" class="nav-item{% if active == 'order_settings' %} active{% endif %}">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-      발주서 설정
     </a>
   </nav>
 </aside>

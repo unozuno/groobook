@@ -84,6 +84,10 @@ a { text-decoration: none; color: inherit; }
   justify-content: center;
 }
 
+.sidebar-brand { border-radius: var(--radius-sm); transition: background 0.12s; }
+.sidebar-brand:hover { background: var(--bg); }
+.sidebar-brand.active { background: var(--primary-soft); }
+
 .brand-text {
   display: flex;
   flex-direction: column;
@@ -804,24 +808,6 @@ header {
 }
 
 .combo { position: relative; width: 100%; }
-.combo input { padding-right: 30px; }
-
-.combo-toggle {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: 11px;
-  border-radius: 6px;
-}
-
-.combo-toggle:hover { background: var(--bg); color: var(--text); }
 
 .hint {
   font-size: 12px;

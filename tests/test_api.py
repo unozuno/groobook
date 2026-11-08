@@ -22,18 +22,24 @@ def _filename(res) -> str:
     return unquote(cd.split("''", 1)[1])
 
 
-@pytest.mark.parametrize("path, active", [("/order-form", "공통발주서"), ("/order-settings", "발주서 설정")])
+@pytest.mark.parametrize("path, active", [("/order-form", "공통발주서"), ("/order-settings", "공통설정")])
 def test_pages_render(client, path, active):
     res = client.get(path)
     assert res.status_code == 200
     assert active in res.text
     assert "/static/js/order_common.js" in res.text
-    assert 'class="nav-item active"' in res.text
+    if path == "/order-form":
+        assert 'class="nav-item active"' in res.text
+    else:
+        assert 'class="sidebar-brand active"' in res.text
 
 
 def test_home_has_cards(client):
     html = client.get("/").text
-    assert 'href="/order-form"' in html and 'href="/order-settings"' in html
+    assert 'href="/order-form"' in html
+    # 설정은 메뉴·카드가 아니라 로고 링크로 이동한다
+    assert 'class="sidebar-brand" title="공통설정"' in html and 'href="/order-settings" class="nav-item' not in html
+    assert 'href="/order-settings" class="card"' not in html
 
 
 def test_get_settings_with_meta(client):
