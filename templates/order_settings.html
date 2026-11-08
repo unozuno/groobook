@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>발주서 설정 - 그루북</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  {% set active = 'order_settings' %}
+  <div class="app">
+  {% include "_sidebar.html" %}
+  <div class="content">
+  <div class="container container-wide">
+    <header style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <h1 class="logo">발주서 설정 <span id="dirtyDot" class="dirty-dot" style="display:none;" title="저장되지 않은 변경"></span></h1>
+      <div class="page-actions">
+        <a href="/order-form" class="btn-small">← 공통발주서 작성</a>
+      </div>
+    </header>
+    <main>
+      <div class="settings-toolbar">
+        <button type="button" class="btn-small primary" id="saveBtn" disabled>저장</button>
+        <button type="button" class="btn-small" id="discardBtn" disabled>변경 취소</button>
+        <span class="spacer"></span>
+        <a class="btn-small" href="/api/order-settings/export" id="exportBtn">내보내기</a>
+        <button type="button" class="btn-small" id="importBtn">가져오기</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+        <button type="button" class="btn-small danger" id="resetBtn">초기값으로 되돌리기</button>
+      </div>
+      <p class="hint" id="savedAt" style="margin:-8px 0 14px;"></p>
+
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="types">제작 종류</button>
+        <button type="button" class="tab" data-tab="messages">전달사항 문구</button>
+        <button type="button" class="tab" data-tab="addresses">주소록</button>
+        <button type="button" class="tab" data-tab="misc">기타</button>
+      </div>
+
+      <!-- 제작 종류 -->
+      <section id="tab-types" class="tab-pane">
+        <div class="settings-layout">
+          <div class="banding-section" style="margin-bottom:0;">
+            <p class="section-title">제작 종류</p>
+            <ul class="type-list" id="typeList"></ul>
+            <div class="table-actions">
+              <button type="button" class="btn-small" id="addTypeBtn">+ 종류 추가</button>
+            </div>
+          </div>
+          <div class="banding-section" style="margin-bottom:0;" id="typeEditor"></div>
+        </div>
+      </section>
+
+      <!-- 전달사항 -->
+      <section id="tab-messages" class="tab-pane" style="display:none;">
+        <div class="banding-section">
+          <p class="section-title">생산처 전달사항 자주 쓰는 문구</p>
+          <div id="messageList"></div>
+          <div class="table-actions">
+            <button type="button" class="btn-small" id="addMessageBtn">+ 문구 추가</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 주소록 -->
+      <section id="tab-addresses" class="tab-pane" style="display:none;">
+        <div class="banding-section">
+          <p class="section-title">인수처 주소 및 담당자 <span class="hint" style="display:inline;margin-left:8px;" id="addressCount"></span></p>
+          <div class="table-wrap" style="margin-bottom:0;">
+            <table class="data-table" id="addressTable">
+              <thead><tr><th>#</th><th style="min-width:150px;">캠퍼스명</th><th style="min-width:280px;">인수처 주소</th><th style="min-width:200px;">인수 담당자</th><th style="min-width:120px;">전화번호</th><th></th></tr></thead>
+              <tbody id="addressBody"></tbody>
+            </table>
+          </div>
+          <div class="table-actions">
+            <button type="button" class="btn-small" id="addAddressBtn">+ 캠퍼스 추가</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 기타 -->
+      <section id="tab-misc" class="tab-pane" style="display:none;">
+        <div class="banding-section">
+          <p class="section-title">기타</p>
+          <div class="form-grid">
+            <div class="field">
+              <label for="multiLabel">다중 발주 시 납품학원 칸 표기</label>
+              <input id="multiLabel" type="text">
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  </div>
+  </div>
+
+  <script src="/static/js/order_common.js"></script>
+  <script src="/static/js/order_settings.js"></script>
+</body>
+</html>
