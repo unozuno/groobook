@@ -174,9 +174,17 @@
       });
     }
 
+  }
+
+  // 선택지 편집 이벤트는 컨테이너에 한 번만 붙인다.
+  // (렌더링마다 붙이면 리스너가 쌓여 클릭 한 번에 선택지가 여러 개 추가되고 렉이 생긴다)
+  function bindTypeEditorDelegates() {
+    const box = $('typeEditor');
+
     box.addEventListener('click', e => {
+      const t = selectedType();
       const btn = e.target.closest('[data-oact]');
-      if (!btn) return;
+      if (!t || !btn) return;
       const fid = btn.dataset.field;
       const f = t.fields[fid];
       const i = Number(btn.dataset.i);
@@ -197,8 +205,9 @@
     });
 
     box.addEventListener('input', e => {
+      const t = selectedType();
       const inp = e.target;
-      if (!inp.dataset.opt) return;
+      if (!t || !inp.dataset.opt) return;
       const f = t.fields[inp.dataset.opt];
       const i = Number(inp.dataset.i);
       const old = f.options[i];
@@ -213,8 +222,9 @@
     });
 
     box.addEventListener('change', e => {
+      const t = selectedType();
       const r = e.target;
-      if (r.type !== 'radio') return;
+      if (!t || r.type !== 'radio') return;
       if (r.dataset.defnull) { t.fields[r.dataset.defnull].default = null; markDirty(); renderTypeEditor(); return; }
       const m = /^def-(.+)$/.exec(r.name);
       if (!m) return;
@@ -476,6 +486,7 @@
 
   async function init() {
     bindToolbar();
+    bindTypeEditorDelegates();
     bindMessages();
     bindAddresses();
     await load();
