@@ -7,30 +7,42 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1 class="logo">그루북</h1>
-      <p class="subtitle">업무 자동화 시스템</p>
-    </header>
-    <main>
-      <div class="card-grid">
-        <a href="/packaging" class="card">
-          <div class="card-icon">📦</div>
-          <div class="card-title">포장전표</div>
-          <div class="card-desc">내신노트 · 분기별교재 · 중간기말교재</div>
-        </a>
-        <a href="/email" class="card">
-          <div class="card-icon">📧</div>
-          <div class="card-title">청구서 메일 발송</div>
-          <div class="card-desc">캠퍼스별 청구서 자동 발송</div>
-        </a>
-        <a href="/jundeung-bill" class="card">
-          <div class="card-icon">📋</div>
-          <div class="card-title">중등 청구서</div>
-          <div class="card-desc">발주서 집계 → 견적서 자동 작성</div>
-        </a>
+  {% set active = 'home' %}
+  <div class="app">
+    {% include "_sidebar.html" %}
+    <div class="content">
+      <div class="container">
+        <header>
+          <h1 class="logo">업무 자동화</h1>
+          <p class="subtitle">진행할 업무를 선택하세요</p>
+        </header>
+        <main>
+          <div class="card-grid">
+            <a href="/packaging" class="card">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>
+              </div>
+              <div class="card-title">포장전표</div>
+              <div class="card-desc">내신노트 · 분기별교재 · 중간기말교재</div>
+            </a>
+            <a href="/email" class="card">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+              </div>
+              <div class="card-title">청구서 메일 발송</div>
+              <div class="card-desc">캠퍼스별 청구서 자동 발송</div>
+            </a>
+            <a href="/jundeung-bill" class="card">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>
+              </div>
+              <div class="card-title">중등 청구서</div>
+              <div class="card-desc">발주서 집계 → 견적서 자동 작성</div>
+            </a>
+          </div>
+        </main>
       </div>
-    </main>
+    </div>
   </div>
 </body>
 </html>

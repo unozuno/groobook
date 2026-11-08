@@ -7,6 +7,10 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+  {% set active = 'email' %}
+  <div class="app">
+  {% include "_sidebar.html" %}
+  <div class="content">
   <div class="container container-narrow">
     <header>
       <a href="/" class="back-btn">← 메인</a>
@@ -117,6 +121,8 @@
       </div>
 
     </main>
+  </div>
+  </div>
   </div>
 
   <!-- 메일 미리보기 모달 -->

@@ -7,31 +7,43 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <a href="/" class="back-btn">← 홈</a>
-      <h1 class="logo">포장전표</h1>
-      <p class="subtitle">작업 유형을 선택하세요</p>
-    </header>
-    <main>
-      <div class="card-grid">
-        <a href="/naeshin" class="card">
-          <div class="card-icon">📓</div>
-          <div class="card-title">내신노트</div>
-          <div class="card-desc">비법전수 내신노트 포장전표 생성<br>밴딩: 30개 고정</div>
-        </a>
-        <a href="/quarterly" class="card">
-          <div class="card-icon">📚</div>
-          <div class="card-title">분기별교재</div>
-          <div class="card-desc">분기별 교재 포장전표 생성<br>밴딩: 파일에서 자동 읽기</div>
-        </a>
-        <a href="/midterm" class="card">
-          <div class="card-icon">📝</div>
-          <div class="card-title">중간기말교재</div>
-          <div class="card-desc">중간/기말고사 교재 포장전표 생성<br>본책 · 미니북 · 교사용</div>
-        </a>
+  {% set active = 'packaging' %}
+  <div class="app">
+    {% include "_sidebar.html" %}
+    <div class="content">
+      <div class="container">
+        <header>
+          <a href="/" class="back-btn">← 홈</a>
+          <h1 class="logo">포장전표</h1>
+          <p class="subtitle">작업 유형을 선택하세요</p>
+        </header>
+        <main>
+          <div class="card-grid">
+            <a href="/naeshin" class="card">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3V4z"/><path d="M9 9h6M9 13h6"/></svg>
+              </div>
+              <div class="card-title">내신노트</div>
+              <div class="card-desc">비법전수 내신노트 포장전표 생성<br>밴딩: 30개 고정</div>
+            </a>
+            <a href="/quarterly" class="card">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h12v16H6a2 2 0 00-2 2V5z"/><path d="M4 21h14"/></svg>
+              </div>
+              <div class="card-title">분기별교재</div>
+              <div class="card-desc">분기별 교재 포장전표 생성<br>밴딩: 파일에서 자동 읽기</div>
+            </a>
+            <a href="/midterm" class="card">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+              </div>
+              <div class="card-title">중간기말교재</div>
+              <div class="card-desc">중간/기말고사 교재 포장전표 생성<br>본책 · 미니북 · 교사용</div>
+            </a>
+          </div>
+        </main>
       </div>
-    </main>
+    </div>
   </div>
 </body>
 </html>

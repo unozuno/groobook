@@ -7,6 +7,10 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+  {% set active = 'packaging' %}
+  <div class="app">
+  {% include "_sidebar.html" %}
+  <div class="content">
   <div class="container container-narrow">
     <header>
       <a href="/packaging" class="back-btn">← 포장전표</a>
@@ -69,9 +73,9 @@
         <div class="success-icon">🎉</div>
         <p class="success-msg">포장전표 PDF가 완성되었습니다!</p>
         {% if type == "midterm" %}
-        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
-          <a class="btn-download" id="downloadBtn" href="#" style="text-align:center;">PDF 다운로드</a>
-          <a class="btn-download" id="downloadExcelBtn" href="#" style="text-align:center;">엑셀 다운로드</a>
+        <div class="download-stack">
+          <a class="btn-download" id="downloadBtn" href="#">PDF 다운로드</a>
+          <a class="btn-download" id="downloadExcelBtn" href="#">엑셀 다운로드</a>
         </div>
         {% else %}
         <a class="btn-download" id="downloadBtn" href="#">PDF 다운로드</a>
@@ -85,6 +89,8 @@
         <button class="btn-secondary" onclick="resetForm()">다시 시도</button>
       </div>
     </main>
+  </div>
+  </div>
   </div>
 
   <script>

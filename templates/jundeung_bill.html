@@ -7,6 +7,10 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+  {% set active = 'jundeung' %}
+  <div class="app">
+  {% include "_sidebar.html" %}
+  <div class="content">
   <div class="container container-narrow">
     <header>
       <a href="/" class="back-btn">← 홈</a>
@@ -57,6 +61,8 @@
         <button class="btn-secondary" onclick="resetForm()">다시 시도</button>
       </div>
     </main>
+  </div>
+  </div>
   </div>
 
   <script>
