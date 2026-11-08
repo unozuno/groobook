@@ -22,9 +22,12 @@ from processors.order_form.clock import today_seoul
 from processors.order_form.fields import (
     FIELD_GROUPS, GROUP_ORDER, ITEM_DEFAULT_KEYS, ITEM_DEFAULT_LABELS, field_meta,
 )
-from processors.order_form.models import GenerateRequest
+from processors.order_form.desktop_paths import resolve_desktop
+from processors.order_form.models import GenerateRequest, ReflectRequest
 from processors.order_form.naming import yymmdd
-from processors.order_form.service import OrderValidationError, OrderWarningsPending, generate
+from processors.order_form.service import (
+    OrderValidationError, OrderWarningsPending, generate, reflect_order,
+)
 from processors.order_form.settings_models import SettingsValidationError
 from processors.order_form.verify import OrderVerifyError
 from renderer.pdf_renderer import render_pdf
@@ -366,3 +369,19 @@ async def order_form_generate(req: GenerateRequest):
     except OrderVerifyError as e:
         raise HTTPException(status_code=500, detail=str(e))
     return Response(content=xlsx, media_type=XLSX_MEDIA_TYPE, headers=_attachment(filename))
+
+
+@app.get("/api/order-form/desktop-info")
+async def order_form_desktop_info():
+    settings = settings_store.load_settings()
+    return JSONResponse(resolve_desktop(settings.get("desktop_dir", "")).as_dict())
+
+
+@app.post("/api/order-form/reflect")
+async def order_form_reflect(req: ReflectRequest):
+    settings = settings_store.load_settings()
+    try:
+        result = reflect_order(req.order, req.targets, req.dry_run, settings)
+    except OrderValidationError as e:
+        return JSONResponse(status_code=422, content={"detail": "입력 오류", **e.result.as_dict()})
+    return JSONResponse(result.as_dict())

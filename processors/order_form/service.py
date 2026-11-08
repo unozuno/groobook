@@ -2,6 +2,7 @@
 from processors.order_form.archive import archive_order
 from processors.order_form.models import OrderRequest
 from processors.order_form.naming import build_filename
+from processors.order_form.reflect import ReflectResult, reflect
 from processors.order_form.validation import Issue, ValidationResult, validate
 from processors.order_form.verify import verify_workbook
 from processors.order_form.xlsx_builder import build_workbook
@@ -33,3 +34,12 @@ def generate(req: OrderRequest, force: bool, settings: dict) -> tuple[bytes, str
     filename = build_filename(order)
     archive_order(req, filename, result.warnings)
     return xlsx, filename, result.warnings
+
+
+def reflect_order(req: OrderRequest, targets: dict, dry_run: bool, settings: dict) -> ReflectResult:
+    """입력을 검증한 뒤 청구서·마케팅팀 파일 반영 계획(dry_run) 또는 실행 결과를 돌려준다.
+    경고(주소록 없음 등)는 반영을 막지 않는다."""
+    result, order = validate(req, settings)
+    if not result.ok or order is None:
+        raise OrderValidationError(result)
+    return reflect(order, targets, settings.get("desktop_dir", ""), dry_run)

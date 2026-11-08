@@ -130,3 +130,58 @@ def test_generate_multi(client):
     assert _filename(res).endswith(" 그루북 평촌분당 교재발주.xlsx")
     wb = load_workbook(BytesIO(res.content))
     assert wb.sheetnames == ["발주서", "납품서_평촌캠퍼스", "납품서_분당캠퍼스"]
+
+
+# ───────── 파일 반영 ─────────
+
+@pytest.fixture
+def desk(tmp_path, monkeypatch):
+    from xlsx_fixtures import make_desktop
+    root = make_desktop(tmp_path / "desk")
+    monkeypatch.setenv("GROOBOOK_DESKTOP_DIR", str(root))
+    return root
+
+
+def _reflect_body(dry_run, **kw):
+    req = make_request(campus="분당캠퍼스", due_date="2026-11-27", items=[
+        {"name": "교재 상품권 난수", "qty": "1000", "color": "2", "unit_price": "250"}], **kw).model_dump()
+    return {"order": req, "targets": {"invoice": True, "marketing": True}, "dry_run": dry_run}
+
+
+def test_desktop_info(client, desk):
+    body = client.get("/api/order-form/desktop-info").json()
+    assert body["exists"] is True and body["source"] == "환경변수" and body["desktop_dir"] == str(desk)
+
+
+def test_desktop_info_prefers_settings(client, desk, tmp_path):
+    s = client.get("/api/order-settings").json()["settings"]
+    s["desktop_dir"] = str(tmp_path / "없음")
+    assert client.put("/api/order-settings", json={"settings": s}).status_code == 200
+    body = client.get("/api/order-form/desktop-info").json()
+    assert body["source"] == "설정" and body["exists"] is False
+
+
+def test_reflect_dry_run_then_apply(client, desk):
+    inv = desk / "2026년 11월 매출청구서_소모품" / "2026년 11월 분당캠퍼스 청구서_소모품.xlsx"
+    before = inv.read_bytes()
+    res = client.post("/api/order-form/reflect", json=_reflect_body(True))
+    assert res.status_code == 200
+    assert [(i["target"], i["status"]) for i in res.json()["items"]] == [("invoice", "ok"), ("marketing", "ok")]
+    assert inv.read_bytes() == before
+
+    res = client.post("/api/order-form/reflect", json=_reflect_body(False))
+    assert [i["status"] for i in res.json()["items"]] == ["done", "done"]
+    assert load_workbook(inv).sheetnames[-1] == "1127교재상품권난수"
+
+    res = client.post("/api/order-form/reflect", json=_reflect_body(False))
+    assert [i["status"] for i in res.json()["items"]] == ["skip", "skip"]
+
+
+def test_reflect_validation_error_and_no_targets(client, desk):
+    body = _reflect_body(True)
+    body["order"]["items"][0]["name"] = ""
+    res = client.post("/api/order-form/reflect", json=body)
+    assert res.status_code == 422 and res.json()["errors"][0]["code"] == "ITEM_NAME_REQUIRED"
+    body = _reflect_body(False)
+    body["targets"] = {}
+    assert client.post("/api/order-form/reflect", json=body).json() == {"items": []}

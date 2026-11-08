@@ -61,6 +61,15 @@ class GenerateRequest(BaseModel):
     force: bool = False
 
 
+class ReflectRequest(BaseModel):
+    """생성한 납품서를 바탕화면의 청구서·마케팅팀 엑셀에 반영 (dry_run=True 면 계획만)."""
+    model_config = ConfigDict(extra="ignore")
+
+    order: OrderRequest
+    targets: dict[str, bool] = Field(default_factory=dict)   # {"invoice": bool, "marketing": bool}
+    dry_run: bool = True
+
+
 # ───────────────────────── 정규화된 구조 ─────────────────────────
 
 @dataclass
