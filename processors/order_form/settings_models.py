@@ -1,10 +1,14 @@
 """관리자 설정 스키마 (Pydantic). 저장·가져오기 전에 구조와 중복을 검증한다."""
+import re
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from processors.order_form.fields import FIELD_IDS, ITEM_DEFAULT_KEYS
 from processors.order_form.pricing_models import PriceRule
+
+
+EMAIL_PATTERN = re.compile(r"[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+")
 
 
 class SettingsValidationError(ValueError):
@@ -113,6 +117,7 @@ class AddressEntry(BaseModel):
     address: str = ""
     contact: str = ""
     phone: str = ""
+    email: str = ""      # 청구서 메일 수신 주소 (학원당 1개)
 
     @model_validator(mode="after")
     def _strip_all(self):
@@ -122,6 +127,9 @@ class AddressEntry(BaseModel):
         self.address = self.address.strip()
         self.contact = self.contact.strip()
         self.phone = self.phone.strip()
+        self.email = self.email.strip()
+        if self.email and not EMAIL_PATTERN.fullmatch(self.email):
+            raise ValueError(f"'{self.name}' 의 이메일 형식이 올바르지 않습니다. 학원당 메일 주소 1개만 입력할 수 있습니다.")
         return self
 
 

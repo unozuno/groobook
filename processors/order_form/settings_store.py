@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 from processors.order_form.clock import now_iso
+from processors.order_form.desktop_paths import norm_name
 from processors.order_form.seed import SCHEMA_VERSION, build_seed_settings
 from processors.order_form.seed_prices import SEED_PRICE_RULES
 from processors.order_form.settings_models import SettingsValidationError, validate_settings
@@ -41,6 +42,42 @@ def _write_atomic(path: Path, obj: dict) -> None:
     os.replace(tmp, path)
 
 
+LEGACY_EMAILS_PATH = _PROJECT_ROOT / "campus_emails.json"
+
+
+def _merge_campus_emails(data: dict, path: Path | None = None) -> None:
+    """v1→v2: 주소록에 email 칸을 만들고, 예전 campus_emails.json(학원명→메일)을 한 번 가져온다.
+    주소록에 이미 메일이 있으면 그 값을 유지하고(주소록 우선), 주소록에 없는 학원은 새 항목으로 추가한다."""
+    book = data.setdefault("address_book", [])
+    for entry in book:
+        entry.setdefault("email", "")
+    path = path or LEGACY_EMAILS_PATH
+    try:
+        with open(path, encoding="utf-8") as f:
+            legacy = json.load(f)
+    except (OSError, ValueError):
+        return
+    if not isinstance(legacy, dict):
+        return
+    by_name = {norm_name(e.get("name", "")): e for e in book}
+    next_no = len(book) + 1
+    for name, email in legacy.items():
+        if not isinstance(name, str) or not isinstance(email, str) or not name.strip() or not email.strip():
+            continue
+        entry = by_name.get(norm_name(name))
+        if entry is not None:
+            if not entry.get("email"):
+                entry["email"] = email.strip()
+            continue
+        existing_ids = {e.get("id") for e in book}
+        while f"a{next_no:03d}" in existing_ids:
+            next_no += 1
+        new = {"id": f"a{next_no:03d}", "name": name.strip(), "address": "", "contact": "", "phone": "",
+               "email": email.strip()}
+        book.append(new)
+        by_name[norm_name(new["name"])] = new
+
+
 def migrate(data: dict) -> dict:
     """스키마 버전 업그레이드 지점. 상위 버전은 거부하고, 단가표가 없던 옛 파일에는 초기 단가표를 채운다."""
     version = data.get("schema_version", 1)
@@ -48,6 +85,8 @@ def migrate(data: dict) -> dict:
         raise SettingsValidationError(
             [f"설정 파일 버전({version})이 프로그램이 지원하는 버전({SCHEMA_VERSION})보다 높습니다."]
         )
+    if version < 2:
+        _merge_campus_emails(data)
     data["schema_version"] = SCHEMA_VERSION
     if "price_rules" not in data:   # 키 자체가 없을 때만 (관리자가 비운 [] 는 존중)
         data["price_rules"] = copy.deepcopy(SEED_PRICE_RULES)
@@ -63,7 +102,11 @@ def _load_unlocked() -> dict:
         return seed
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    return validate_settings(migrate(data))
+    old_version = data.get("schema_version", 1)
+    result = validate_settings(migrate(data))
+    if old_version < SCHEMA_VERSION:      # 업그레이드 결과를 저장해 두어 다음부터는 다시 병합하지 않는다
+        _write_atomic(path, result)
+    return result
 
 
 def load_settings() -> dict:
