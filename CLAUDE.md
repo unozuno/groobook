@@ -36,7 +36,7 @@ GMAIL_ADDRESS=your-gmail@gmail.com
 GMAIL_APP_PASSWORD=your-16-char-app-password
 ```
 
-**`campus_emails.json`** (project root): Maps Korean campus names → email addresses. Must be updated manually when adding new campuses.
+**청구서 수신 메일 주소**: 공통설정(`/order-settings`) → 주소록의 `이메일` 칸(학원당 1개)에서 관리한다. `campus_emails.json`(project root) 은 폐기 예정으로, schema v1→v2 마이그레이션 때 주소록으로 한 번 가져오는 용도로만 읽는다(주소록에 이미 값이 있으면 주소록 우선, 주소록에 없는 학원은 새 항목으로 추가). 모든 PC(EC2 포함)가 새 버전을 한 번 실행한 뒤 이 파일을 `git rm` 한다. `data/` 는 PC별이라 서버와 로컬 PC 의 주소록은 각자이며, 공통설정의 내보내기/가져오기로 맞춘다.
 
 **`data/` directory** (git-ignored, auto-created on first use; override location with env `GROOBOOK_DATA_DIR`):
 - `data/order_settings.json` — 공통발주서 admin settings (제작 종류, 선택지/기본값, 전달사항 문구, 주소록, 조건부 규칙). Seeded from `processors/order_form/seed.py` when missing; edited via `/order-settings`. Never hand-edit while the server runs.
@@ -65,7 +65,7 @@ Browser polls GET /api/progress/{task_id} → GET /api/download/{task_id}
 
 ```
 Browser upload → POST /api/email/scan
-  → filename regex parse + campus_emails.json lookup
+  → filename regex parse + 주소록(address_book) 이메일 lookup (공백·NFC 무시 비교)
   → preview table returned (stored in email_scans[scan_id])
 User confirms → POST /api/email/send
   → background thread → email_sender.py → Gmail SMTP (port 587, STARTTLS)
@@ -123,7 +123,7 @@ All task state lives in two in-memory dicts in `main.py` (`tasks`, `email_scans`
 | `renderer/templates/slip_naeshin.html` | A4 landscape, 2×2 slip grid |
 | `renderer/templates/slip_midterm.html` | A4 landscape, 2×3 slip grid (also used for quarterly) |
 | `templates/work.html` | Reusable upload page — `{{ show_banding }}` flag controls midterm banding inputs |
-| `campus_emails.json` | Campus name → email mapping |
+| `campus_emails.json` | Legacy campus → email map; read once by the v1→v2 settings migration only (to be removed) |
 | `processors/formula_eval.py` | Minimal Excel formula evaluator (cell refs, SUM, arithmetic chains); shared by 중등 청구서 and 공통발주서 verification |
 | `processors/order_form/fields.py` | The 14 spec field ids/labels/groups — single source of truth for settings JSON, request JSON and the JS |
 | `processors/order_form/pricing_models.py` / `seed_prices.py` | 단가표 rule schema; seed rules transcribed from the sample 단가표 sheet |

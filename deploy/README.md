@@ -22,7 +22,7 @@
 
 3. **로컬에서 준비**
    - `.env` 파일 생성 (다음 섹션 참조)
-   - `campus_emails.json` 준비 (git-ignored 파일)
+   - 청구서 수신 메일은 서버 실행 후 공통설정 → 주소록의 이메일 칸에 등록 (기존 `campus_emails.json` 이 있으면 첫 실행 때 자동으로 가져옴)
 
 ---
 
@@ -76,12 +76,11 @@ GMAIL_APP_PASSWORD=your-16-char-app-password
 
 저장 후 종료 (`Ctrl+X` → `Y` → `Enter`)
 
-### Step 5: campus_emails.json 업로드
+### Step 5: 청구서 수신 메일 (campus_emails.json 은 폐기 예정)
 
-로컬에서:
-```bash
-scp -i your-key.pem campus_emails.json ec2-user@<EC2-IP>:/home/ec2-user/groobook-web/
-```
+수신 메일 주소는 공통설정(`/order-settings`) → 주소록의 `이메일` 칸에서 관리합니다. 파일을 따로 올릴 필요가 없습니다.
+- 이 서버에 기존 `campus_emails.json` 이 `git pull` 로 들어와 있으면, 새 버전의 첫 실행 때 주소록으로 자동 병합됩니다(주소록에 이미 값이 있으면 주소록 우선).
+- `data/` 는 서버마다 따로라서, 로컬 PC 에서 입력한 주소록은 공통설정의 내보내기 → 서버에서 가져오기로 옮깁니다.
 
 ### Step 5-1: 공통발주서 데이터 폴더 (`data/`)
 

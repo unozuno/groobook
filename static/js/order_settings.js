@@ -298,6 +298,7 @@
         <td><input type="text" value="${esc(a.address)}" data-addr="address" data-i="${i}"></td>
         <td><input type="text" value="${esc(a.contact)}" data-addr="contact" data-i="${i}"></td>
         <td><input type="text" value="${esc(a.phone)}" data-addr="phone" data-i="${i}"></td>
+        <td><input type="text" value="${esc(a.email || '')}" data-addr="email" data-i="${i}" placeholder="name@example.com" inputmode="email"></td>
         <td class="act" style="white-space:nowrap;width:96px;">
           <button type="button" class="icon-btn" data-aact="up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>▲</button>
           <button type="button" class="icon-btn" data-aact="down" data-i="${i}" ${i === book.length - 1 ? 'disabled' : ''}>▼</button>
@@ -305,7 +306,11 @@
         </td>
       </tr>`).join('');
     markAddressDuplicates();
+    for (const inp of $('addressBody').querySelectorAll('input[data-addr="email"]')) inp.classList.toggle('cell-error', !emailOk(inp.value));
   }
+
+  const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+  const emailOk = v => !v.trim() || EMAIL_RE.test(v.trim());
 
   function markAddressDuplicates() {
     const counts = {};
@@ -322,6 +327,7 @@
       if (!inp.dataset.addr) return;
       state.settings.address_book[Number(inp.dataset.i)][inp.dataset.addr] = inp.value;
       if (inp.dataset.addr === 'name') markAddressDuplicates();
+      if (inp.dataset.addr === 'email') inp.classList.toggle('cell-error', !emailOk(inp.value));
       markDirty();
     });
     $('addressBody').addEventListener('click', async e => {
@@ -337,7 +343,7 @@
       markDirty(); renderAddresses();
     });
     $('addAddressBtn').addEventListener('click', () => {
-      state.settings.address_book.push({ id: uid('a'), name: '', address: '', contact: '', phone: '' });
+      state.settings.address_book.push({ id: uid('a'), name: '', address: '', contact: '', phone: '', email: '' });
       markDirty(); renderAddresses();
       const rows = $('addressBody').children;
       rows[rows.length - 1]?.querySelector('input')?.focus();
@@ -501,6 +507,9 @@
     const names = s.address_book.map(a => a.name.trim());
     if (names.some(n => !n)) problems.push('캠퍼스명이 비어 있는 주소록 항목이 있습니다.');
     if (new Set(names).size !== names.length) problems.push('주소록 캠퍼스명이 중복됩니다.');
+    for (const a of s.address_book) {
+      if (!emailOk(a.email || '')) problems.push(`'${a.name.trim() || '(이름 없음)'}' 의 이메일 형식이 올바르지 않습니다. 학원당 메일 주소 1개만 입력할 수 있습니다.`);
+    }
     const typeName = id => (s.types.find(t => t.id === id) || {}).name || id;
     s.price_rules.forEach(r => {
       if (r.qty_min != null && r.qty_max != null && r.qty_min > r.qty_max) problems.push(`단가표 · ${typeName(r.type_id)}: 수량 하한이 상한보다 큰 줄이 있습니다.`);
