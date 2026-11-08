@@ -88,6 +88,15 @@ def test_item_name_required_in_blank_delivery(settings):
     assert "제품명" in res.errors[0].message
 
 
+def test_job_no_required(settings):
+    for mode, extra in (("order", {}), ("blank_delivery", {"campus": "분당캠퍼스"})):
+        res, order = validate(base_request(mode=mode, job_no="  ", **extra), settings)
+        assert order is None
+        assert [(i.code, i.path) for i in res.errors] == [("JOB_NO_REQUIRED", "job_no")]
+    res, _ = validate(base_request(job_no="2105"), settings)
+    assert res.ok
+
+
 def test_type_required(settings):
     res, _ = validate(base_request(type_id="nope"), settings)
     assert "TYPE_REQUIRED" in codes(res, "errors")

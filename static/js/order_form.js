@@ -536,6 +536,7 @@
     } else if (!state.campus.trim()) {
       err('CAMPUS_REQUIRED', 'campus', '납품학원을 입력해 주세요.');
     }
+    if (!state.jobNo.trim()) err('JOB_NO_REQUIRED', 'job_no', '작업번호를 입력해 주세요.');
     if (!state.dueDate) {
       warn('DUE_DATE_MISSING', 'due_date', `${bd ? '납품일' : '납기일자'}이 비어 있어 납품서의 납품일이 빈칸으로 출력됩니다.`);
     }
@@ -595,7 +596,7 @@
     return issues;
   }
 
-  const TOP_PATHS = { type_id: 'typeInput', campus: 'campusInput', multi_name: 'multiName', due_date: 'dueDate', received_date: 'receivedDate' };
+  const TOP_PATHS = { type_id: 'typeInput', campus: 'campusInput', multi_name: 'multiName', due_date: 'dueDate', received_date: 'receivedDate', job_no: 'jobNo' };
 
   function renderIssues(issues) {
     const list = $('issueList');
@@ -760,7 +761,7 @@
     $('dueDate').addEventListener('input', e => { state.dueDate = e.target.value; state.serverIssues = null; scheduleValidate(); });
     $('campusInput').addEventListener('input', e => { if (!e.target.disabled) state.campus = e.target.value; state.serverIssues = null; scheduleValidate(); });
     $('multiName').addEventListener('input', e => { state.multiName = e.target.value; state.serverIssues = null; scheduleValidate(); });
-    $('jobNo').addEventListener('input', e => { state.jobNo = e.target.value; });
+    $('jobNo').addEventListener('input', e => { state.jobNo = e.target.value; state.serverIssues = null; scheduleValidate(); });
     $('msgExtra').addEventListener('input', e => { state.messageExtra = e.target.value; });
     bindItemsEvents();
     bindDistEvents();

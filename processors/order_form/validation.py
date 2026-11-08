@@ -121,6 +121,10 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         label = "납품일" if mode == "blank_delivery" else "납기일자"
         res.warn("DUE_DATE_MISSING", "due_date", f"{label}이 비어 있어 납품서의 납품일이 빈칸으로 출력됩니다.")
 
+    # 작업번호
+    if not req.job_no.strip():
+        res.error("JOB_NO_REQUIRED", "job_no", "작업번호를 입력해 주세요.")
+
     # 납품학원 / 수령자
     campus = req.campus.strip()
     multi_name = req.multi_name.strip()
