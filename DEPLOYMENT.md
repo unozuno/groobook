@@ -50,7 +50,7 @@ ssh -i ~/Downloads/groobook-key.pem ec2-user@3.39.255.162
 
 ```bash
 cd /home/ec2-user
-git clone https://github.com/juhhoho/groobook-web.git groobook-web
+git clone https://github.com/unozuno/groobook.git groobook-web
 cd groobook-web
 bash deploy/setup.sh <DUCKDNS_TOKEN> <DUCKDNS_DOMAIN>
 ```
