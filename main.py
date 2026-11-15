@@ -26,7 +26,7 @@ from processors.order_form.desktop_paths import resolve_desktop
 from processors.order_form.models import GenerateRequest, QuoteRequest, ReflectRequest
 from processors.order_form.naming import yymmdd
 from processors.order_form.service import (
-    OrderValidationError, OrderWarningsPending, generate, quote_items, reflect_order,
+    OrderValidationError, OrderWarningsPending, generate, quote_extras, quote_items, reflect_order,
 )
 from processors.order_form.settings_models import SettingsValidationError
 from processors.order_form.verify import OrderVerifyError
@@ -375,7 +375,8 @@ async def order_form_generate(req: GenerateRequest):
 @app.post("/api/order-form/price-quote")
 async def order_form_price_quote(req: QuoteRequest):
     """입력 중인 품목별 자동 단가 (items 와 같은 길이, 빈 행은 null)."""
-    return JSONResponse({"items": quote_items(req.order, settings_store.load_settings())})
+    settings = settings_store.load_settings()
+    return JSONResponse({"items": quote_items(req.order, settings), **quote_extras(req.order, settings)})
 
 
 @app.get("/api/order-form/desktop-info")

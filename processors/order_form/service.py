@@ -4,7 +4,7 @@ from processors.order_form.compute import page_total
 from processors.order_form.fields import FIELD_IDS
 from processors.order_form.models import Item, OrderRequest
 from processors.order_form.naming import build_filename
-from processors.order_form.pricing import quote
+from processors.order_form.pricing import quote, quote_extra
 from processors.order_form.reflect import ReflectResult, reflect
 from processors.order_form.validation import Issue, ValidationResult, parse_int, validate
 from processors.order_form.verify import verify_workbook
@@ -46,6 +46,25 @@ def reflect_order(req: OrderRequest, targets: dict, dry_run: bool, settings: dic
     if not result.ok or order is None:
         raise OrderValidationError(result)
     return reflect(order, targets, settings.get("desktop_dir", ""), dry_run)
+
+
+def quote_extras(req: OrderRequest, settings: dict) -> dict:
+    """납품서 추가 항목의 자동 단가 (항목명·납품학원 기준). 요청의 extras / extras_by_campus 와 같은 모양,
+    항목명이 비어 있는 행은 None."""
+    rules = settings.get("price_rules", [])
+
+    def one(ex, campus: str):
+        name = (ex.name or "").strip()
+        if not name:
+            return None
+        q = quote_extra(name, campus, rules)
+        return {"status": q.status, "price": q.price, "reason": q.reason}
+
+    campus = req.campus.strip()
+    return {
+        "extras": [one(ex, campus) for ex in req.extras],
+        "extras_by_campus": [[one(ex, ce.campus.strip()) for ex in ce.extras] for ce in req.extras_by_campus],
+    }
 
 
 def quote_items(req: OrderRequest, settings: dict) -> list[dict | None]:

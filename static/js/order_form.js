@@ -21,6 +21,7 @@
     extras: [], distExtras: {},   // 납품서 추가 항목 (단일 / 다중은 분배표 행 id 별)
     serverIssues: null,
     quotes: [],   // 서버가 계산한 품목별 자동 단가 {status, price, reason} | null (품목 순서)
+    extraQuotes: { extras: [], extras_by_campus: [] },   // 추가 항목 자동 단가 (요청의 extras / extras_by_campus 와 같은 모양)
   };
 
   // ───────────── 헬퍼 ─────────────
@@ -122,6 +123,7 @@
   }
 
   function applyTypeDefaults() {
+    clearFollowNotes();
     const t = currentType();
     state.specTouched.clear();
     if (t && state.mode === 'order') {
@@ -191,11 +193,11 @@
       for (const fid of g.fields) {
         const td = document.createElement('td');
         const follow = SIZE_FOLLOW_FIELDS.includes(fid)
-          ? `<button type="button" class="follow-badge off" data-follow="${fid}" title="내지 사이즈를 따라갑니다">내지 따름</button>
-             <small class="follow-note" data-follow-note="${fid}"></small>` : '';
+          ? `<button type="button" class="follow-badge off" data-follow="${fid}" title="내지 사이즈를 따라갑니다">내지 따름</button>` : '';
         td.innerHTML = `<div class="spec-cell">
             <span class="field-label">${esc(fieldLabel(fid))} ${follow}</span>
             <input type="text" data-field="${fid}" data-path="spec.${fid}">
+            <small class="follow-note" data-follow-note="${fid}"></small>
           </div>`;
         tr.appendChild(td);
       }
@@ -209,10 +211,10 @@
       btn.addEventListener('click', () => {
         const f = btn.dataset.follow;
         if (!state.sizeFollow[f] && !canFollow(f)) {
-          if (isBlank(state.spec[SIZE_SOURCE])) toast('내지 사이즈를 먼저 입력해 주세요.');
-          updateSpecInputs();
+          showFollowNote(f);   // 안내는 버튼을 눌렀을 때만 보여 준다
           return;
         }
+        clearFollowNotes();
         state.sizeFollow[f] = !state.sizeFollow[f];
         if (state.sizeFollow[f]) {
           state.specTouched.delete(f);
@@ -224,7 +226,27 @@
     }
   }
 
+  // '내지 따름' 불가 안내 — 눌렀을 때만 잠깐 보여 주고, 사양을 고치면 사라진다
+  let followNoteTimer = null;
+  function followNoteText(f) {
+    const inner = (state.spec[SIZE_SOURCE] || '').trim();
+    return inner ? `${fieldGroupName(f)} 사이즈 옵션에 '${inner}' 이(가) 없어 선택할 수 없습니다`
+                 : '내지 사이즈를 먼저 입력해 주세요';
+  }
+  function showFollowNote(f) {
+    clearFollowNotes();
+    const el = $('specBody').querySelector(`[data-follow-note="${f}"]`);
+    if (!el) return;
+    el.textContent = followNoteText(f);
+    followNoteTimer = setTimeout(clearFollowNotes, 4000);
+  }
+  function clearFollowNotes() {
+    clearTimeout(followNoteTimer);
+    for (const el of $('specBody').querySelectorAll('[data-follow-note]')) el.textContent = '';
+  }
+
   function onSpecInput(fid, value) {
+    clearFollowNotes();
     state.spec[fid] = value;
     state.specTouched.add(fid);
     if (fid === SIZE_SOURCE) {
@@ -253,12 +275,6 @@
       btn.classList.toggle('unavailable', unavailable);
       btn.title = on ? '내지 사이즈를 따라가는 중입니다. 눌러서 해제'
         : unavailable ? '선택할 수 없습니다' : '내지 사이즈를 따라가지 않습니다. 눌러서 연결';
-      const note = $('specBody').querySelector(`[data-follow-note="${f}"]`);
-      if (note) {
-        const inner = (state.spec[SIZE_SOURCE] || '').trim();
-        note.textContent = unavailable && inner && state.mode === 'order'
-          ? `${fieldGroupName(f)} 사이즈 옵션에 '${inner}' 이(가) 없어 선택할 수 없습니다` : '';
-      }
     }
   }
 
@@ -547,9 +563,22 @@
     if (!owner) return state.extras;
     return state.distExtras[owner] || (state.distExtras[owner] = []);
   }
-  const extraAmount = ex => {
+  // 추가 항목의 자동 단가 응답: 단일 = extras[i], 다중 = extras_by_campus[분배표 행 j][i]
+  function extraQuote(j, i) {
+    const eq = state.extraQuotes;
+    const list = isMulti() ? (eq.extras_by_campus || [])[j] : eq.extras;
+    return (list && list[i]) || null;
+  }
+  // 입력한 단가 > 자동 단가
+  function extraPrice(ex, j, i) {
+    const typed = parseInt0(ex.unitPrice).value;
+    if (typed != null) return typed;
+    const q = extraQuote(j, i);
+    return q && q.status === 'auto' ? q.price : null;
+  }
+  const extraAmount = (ex, j, i) => {
     const q = parseInt0(ex.qty).value;
-    const p = parseInt0(ex.unitPrice).value;
+    const p = extraPrice(ex, j, i);
     return q && p != null ? q * p : null;
   };
   const distLabel = (d, j) => d.campus.trim() || `학원 ${j + 1}`;
@@ -560,12 +589,12 @@
     const head = owner ? `<div class="extras-head"><span class="extras-title" data-extras-title="${esc(owner)}">${esc(title)}</span></div>` : '';
     const body = rows.map((ex, i) => {
       const path = `${prefix}[${i}]`;
-      const amt = extraAmount(ex);
+      const amt = extraAmount(ex, j, i);
       return `<tr>
         <td class="idx">${i + 1}</td>
         <td><input type="text" list="dl-extras" autocomplete="off" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="name" data-path="${path}.name" value="${esc(ex.name)}" placeholder="항목 선택 또는 입력"></td>
         <td><input type="text" class="num" inputmode="numeric" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="qty" data-path="${path}.qty" value="${esc(ex.qty)}"></td>
-        <td><input type="text" class="num" inputmode="numeric" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="unitPrice" data-path="${path}.unit_price" value="${esc(ex.unitPrice)}"></td>
+        <td><input type="text" class="num" inputmode="numeric" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="unitPrice" data-path="${path}.unit_price" value="${esc(ex.unitPrice)}"><small class="price-note"></small></td>
         <td><input type="text" class="num cell-readonly" readonly tabindex="-1" data-amount="${ex.id}" value="${amt == null ? '' : amt.toLocaleString()}"></td>
         <td class="act"><button type="button" class="icon-btn danger" data-ex-del="${ex.id}" data-owner="${esc(owner || '')}" title="행 삭제">✕</button></td>
       </tr>`;
@@ -573,7 +602,7 @@
     const table = rows.length ? `<div class="table-wrap" style="margin-bottom:0;"><table class="data-table">
         <thead><tr><th>#</th><th>항목</th><th>수량</th><th>단가</th><th>공급액</th><th></th></tr></thead>
         <tbody>${body}</tbody>
-        <tfoot><tr><td colspan="4">합계</td><td data-extras-total="${esc(owner || '')}">${extrasTotal(rows).toLocaleString()}</td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="4">합계</td><td data-extras-total="${esc(owner || '')}">${extrasTotal(rows, j).toLocaleString()}</td><td></td></tr></tfoot>
       </table></div>` : '<p class="extras-empty">추가 항목이 없습니다.</p>';
     const copy = owner && state.distribution.length > 1
       ? `<button type="button" class="btn-small" data-ex-copy-sel="${esc(owner)}">선택한 학원에 복사…</button>
@@ -582,15 +611,52 @@
       <div class="extras-actions"><button type="button" class="btn-small" data-ex-add="${esc(owner || '')}">+ 항목 추가</button>${copy}</div></div>`;
   }
 
-  const extrasTotal = rows => rows.reduce((s, ex) => s + (extraAmount(ex) || 0), 0);
+  const extrasTotal = (rows, j) => rows.reduce((s, ex, i) => s + (extraAmount(ex, j, i) || 0), 0);
+
+  // 입력·자동 단가 응답이 바뀔 때 입력칸을 다시 그리지 않고 단가 안내·공급액·합계만 갱신한다
+  function refreshExtras() {
+    const wrap = $('extrasWrap');
+    const owners = isMulti() ? state.distribution.map(d => d.id) : [null];
+    owners.forEach((owner, j) => {
+      const rows = extraRows(owner);
+      rows.forEach((ex, i) => {
+        const q = extraIsEmpty(ex) || isBlank(ex.name) ? null : extraQuote(j, i);
+        const typed = parseInt0(ex.unitPrice).value;
+        const inp = wrap.querySelector(`input[data-eid="${ex.id}"][data-k="unitPrice"]`);
+        if (inp) {
+          const note = inp.parentElement.querySelector('.price-note');
+          inp.classList.toggle('price-auto', !!q && q.status === 'auto' && typed == null);
+          let text = '', kind = '', placeholder = '';
+          if (q && q.status === 'auto') {
+            placeholder = q.price.toLocaleString();
+            if (typed == null) { text = '자동 단가'; kind = 'auto'; }
+            else if (typed !== q.price) { text = `수정됨 (자동 ${q.price.toLocaleString()})`; kind = 'edited'; }
+            else { text = '자동 단가와 같음'; kind = 'auto'; }
+          } else if (q) {
+            placeholder = '직접 입력';
+            if (typed == null) { text = '직접 입력 필요'; kind = 'manual'; }
+          }
+          inp.placeholder = placeholder;
+          inp.title = q && q.status === 'manual' ? q.reason : '';
+          if (note) { note.textContent = text; note.className = 'price-note ' + kind; }
+        }
+        const amt = wrap.querySelector(`[data-amount="${ex.id}"]`);
+        if (amt) { const a = extraAmount(ex, j, i); amt.value = a == null ? '' : a.toLocaleString(); }
+      });
+      const tot = wrap.querySelector(`[data-extras-total="${owner || ''}"]`);
+      if (tot) tot.textContent = extrasTotal(rows, j).toLocaleString();
+    });
+  }
 
   function renderExtras() {
     const wrap = $('extrasWrap');
     if (!isMulti()) {
       wrap.innerHTML = extrasBlockHtml(null, '', 0);
+      refreshExtras();
       return;
     }
     wrap.innerHTML = state.distribution.map((d, j) => extrasBlockHtml(d.id, distLabel(d, j), j)).join('');
+    refreshExtras();
   }
 
   function updateExtrasTitles() {
@@ -636,10 +702,7 @@
       const ex = extraRows(inp.dataset.owner || null).find(x => x.id === inp.dataset.eid);
       if (!ex) return;
       ex[inp.dataset.k] = inp.value;
-      const amt = wrap.querySelector(`[data-amount="${ex.id}"]`);
-      if (amt) { const a = extraAmount(ex); amt.value = a == null ? '' : a.toLocaleString(); }
-      const tot = wrap.querySelector(`[data-extras-total="${inp.dataset.owner || ''}"]`);
-      if (tot) tot.textContent = extrasTotal(extraRows(inp.dataset.owner || null)).toLocaleString();
+      refreshExtras();
       state.serverIssues = null;
       scheduleValidate();
     });
@@ -674,7 +737,7 @@
   }
 
   // 서버 validation._parse_extras 와 동일한 규칙
-  function validateExtraRows(rows, prefix, issues) {
+  function validateExtraRows(rows, prefix, issues, j) {
     const err = (code, path, message) => issues.push({ level: 'error', code, path, message });
     const warn = (code, path, message) => issues.push({ level: 'warning', code, path, message });
     rows.forEach((ex, i) => {
@@ -686,7 +749,11 @@
       if (!q.ok) err('EXTRA_NUM_INVALID', `${p}.qty`, `추가 항목 ${i + 1}번의 수량 값은 0 이상의 정수여야 합니다.`);
       if (!u.ok) err('EXTRA_NUM_INVALID', `${p}.unit_price`, `추가 항목 ${i + 1}번의 단가 값은 0 이상의 정수여야 합니다.`);
       if (!q.value) warn('EXTRA_QTY_EMPTY', `${p}.qty`, `추가 항목 ${i + 1}번의 수량이 비어 있거나 0 입니다.`);
-      else if (isBlank(ex.unitPrice)) err('EXTRA_PRICE_REQUIRED', `${p}.unit_price`, `추가 항목 ${i + 1}번의 단가를 입력해 주세요.`);
+      else if (isBlank(ex.unitPrice) && ex.name.trim()) {
+        // 자동 단가가 없는 항목은 단가를 직접 입력해야 한다 (자동 단가 여부는 서버 응답 기준)
+        const q = extraQuote(j, i);
+        if (q && q.status === 'manual') err('EXTRA_PRICE_REQUIRED', `${p}.unit_price`, `추가 항목 ${i + 1}번: ${q.reason}`);
+      }
     });
   }
 
@@ -842,14 +909,14 @@
       });
       state.distribution.forEach((d, j) => {
         const rows = extraRows(d.id);
-        validateExtraRows(rows, `extras_by_campus[${j}].extras`, issues);
+        validateExtraRows(rows, `extras_by_campus[${j}].extras`, issues, j);
         if (rows.some(ex => !extraIsEmpty(ex)) && !deliverable.has(d.id)) {
           warn('EXTRA_CAMPUS_UNKNOWN', `extras_by_campus[${j}].campus`,
                `추가 항목의 학원 '${d.campus.trim()}' 은(는) 납품서가 없어 반영되지 않습니다.`);
         }
       });
     } else {
-      validateExtraRows(state.extras, 'extras', issues);
+      validateExtraRows(state.extras, 'extras', issues, 0);
     }
     return issues;
   }
@@ -897,15 +964,19 @@
   async function fetchQuotes() {
     const seq = ++quoteSeq;
     let items = [];
+    let body = {};
     try {
       const res = await postJson('/api/order-form/price-quote', { order: buildPayload() });
       if (!res.ok) return;
-      items = (await res.json()).items || [];
+      body = await res.json();
+      items = body.items || [];
     } catch (e) {
       return;   // 서버가 응답하지 않으면 자동 단가 없이 두고, 생성 시 서버 검증이 판단한다
     }
     if (seq !== quoteSeq) return;   // 더 최근 입력의 응답이 있음
     state.quotes = items;
+    state.extraQuotes = { extras: body.extras || [], extras_by_campus: body.extras_by_campus || [] };
+    refreshExtras();
     updatePriceCells();
     renderItemsFoot();
     validateAndRender();

@@ -357,6 +357,9 @@
 
   const DELIVERY_ID = 'delivery';   // 납품서(납품서 모드): 제품명 + 납품학원별 단가
   const DELIVERY_LABEL = '납품서';
+  const EXTRA_ID = 'extra';         // 납품서 추가 항목(택배비 등): 항목명 + 납품학원별 단가
+  const EXTRA_LABEL = '추가 항목';
+  const isNamedTable = id => id === DELIVERY_ID || id === EXTRA_ID;   // 제품명(항목명) + 납품학원 방식의 단가표
   const DELIVERY_KINDS = { manual: '직접 입력', fixed: '고정 금액' };
   const priceKind = r => (r.price ? r.price.kind : 'manual');
   const numOrNull = v => (String(v).trim() === '' ? null : Number(String(v).replace(/,/g, '')));
@@ -369,13 +372,14 @@
   function renderPrices() {
     const s = state.settings;
     const sel = $('priceType');
-    if (state.priceTypeId !== DELIVERY_ID && !s.types.some(t => t.id === state.priceTypeId)) state.priceTypeId = s.types[0]?.id ?? null;
-    sel.innerHTML = [...s.types.map(t => [t.id, t.name]), [DELIVERY_ID, DELIVERY_LABEL]]
+    if (!isNamedTable(state.priceTypeId) && !s.types.some(t => t.id === state.priceTypeId)) state.priceTypeId = s.types[0]?.id ?? null;
+    sel.innerHTML = [...s.types.map(t => [t.id, t.name]), [DELIVERY_ID, DELIVERY_LABEL], [EXTRA_ID, EXTRA_LABEL]]
       .map(([id, name]) => `<option value="${esc(id)}" ${id === state.priceTypeId ? 'selected' : ''}>${esc(name)}</option>`).join('');
     $('priceCount').textContent = `전체 ${s.price_rules.length}줄`;
-    $('priceHelp').style.display = state.priceTypeId === DELIVERY_ID ? 'none' : '';
+    $('priceHelp').style.display = isNamedTable(state.priceTypeId) ? 'none' : '';
     $('deliveryHelp').style.display = state.priceTypeId === DELIVERY_ID ? '' : 'none';
-    if (state.priceTypeId === DELIVERY_ID) { renderDeliveryPrices(); return; }
+    $('extraHelp').style.display = state.priceTypeId === EXTRA_ID ? '' : 'none';
+    if (isNamedTable(state.priceTypeId)) { renderDeliveryPrices(); return; }
     const heads = PRICE_COND_FIELDS.map(f => {
       const m = state.meta.fields.find(x => x.id === f);
       return `<th style="min-width:130px;">${esc(m ? `${m.group} ${m.label}` : f)}</th>`;
@@ -408,13 +412,14 @@
   }
 
   function renderDeliveryPrices() {
-    $('priceHead').innerHTML = '<tr><th>#</th><th style="min-width:200px;">제품명</th><th style="min-width:260px;">납품학원 (비우면 모든 학원)</th><th style="min-width:130px;">방식</th><th style="min-width:100px;">단가</th><th></th></tr>';
+    const extra = state.priceTypeId === EXTRA_ID;
+    $('priceHead').innerHTML = `<tr><th>#</th><th style="min-width:200px;">${extra ? '항목명' : '제품명'}</th><th style="min-width:260px;">납품학원 (비우면 모든 학원)</th><th style="min-width:130px;">방식</th><th style="min-width:100px;">단가</th><th></th></tr>`;
     const rules = priceRulesOfType();
     $('priceBody').innerHTML = rules.length ? rules.map((r, i) => {
       const kind = priceKind(r);
       return `<tr data-rid="${esc(r.id)}">
         <td class="idx">${i + 1}</td>
-        <td><input type="text" data-pprod="1" value="${esc(r.product || '')}" placeholder="예: 대봉투"></td>
+        <td><input type="text" data-pprod="1" value="${esc(r.product || '')}" placeholder="${extra ? '예: 택배비' : '예: 대봉투'}" ${extra ? 'list="dl-extra-names"' : ''}></td>
         <td><input type="text" data-pcamp="1" value="${esc((r.campuses || []).join(', '))}" placeholder="예: 대치크레오, 하남크레오"></td>
         <td><select data-pkind="1">${Object.entries(DELIVERY_KINDS).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
         <td><input type="text" class="num" data-pp="amount" value="${numVal(kind === 'fixed' ? r.price.amount : '')}" inputmode="numeric" ${kind === 'manual' ? 'disabled' : ''}></td>
@@ -424,7 +429,7 @@
           <button type="button" class="icon-btn" data-pact="copy" title="이 줄을 그대로 복사해 아래에 추가">복제</button>
           <button type="button" class="icon-btn danger" data-pact="del" title="삭제">✕</button>
         </td></tr>`;
-    }).join('') : '<tr><td colspan="6" class="hint" style="text-align:center;padding:14px;">납품서 단가 줄이 없습니다. 납품서의 단가는 직접 입력해야 합니다.</td></tr>';
+    }).join('') : `<tr><td colspan="6" class="hint" style="text-align:center;padding:14px;">${extra ? '추가 항목' : '납품서'} 단가 줄이 없습니다. 단가는 발주서에서 직접 입력해야 합니다.</td></tr>`;
   }
 
   function bindPrices() {
@@ -542,10 +547,10 @@
     for (const a of s.address_book) {
       if (!emailOk(a.email || '')) problems.push(`'${a.name.trim() || '(이름 없음)'}' 의 이메일 형식이 올바르지 않습니다. 학원당 메일 주소 1개만 입력할 수 있습니다.`);
     }
-    const typeName = id => (id === DELIVERY_ID ? '납품서' : (s.types.find(t => t.id === id) || {}).name || id);
+    const typeName = id => (id === DELIVERY_ID ? '납품서' : id === EXTRA_ID ? '추가 항목' : (s.types.find(t => t.id === id) || {}).name || id);
     s.price_rules.forEach(r => {
       if (r.qty_min != null && r.qty_max != null && r.qty_min > r.qty_max) problems.push(`단가표 · ${typeName(r.type_id)}: 수량 하한이 상한보다 큰 줄이 있습니다.`);
-      if (r.type_id === DELIVERY_ID && !(r.product || '').trim()) problems.push('단가표 · 납품서: 제품명이 비어 있는 줄이 있습니다.');
+      if (isNamedTable(r.type_id) && !(r.product || '').trim()) problems.push(`단가표 · ${typeName(r.type_id)}: ${r.type_id === EXTRA_ID ? '항목명' : '제품명'}이 비어 있는 줄이 있습니다.`);
       if (r.price && r.price.kind === 'fixed' && r.price.amount == null) problems.push(`단가표 · ${typeName(r.type_id)}: 금액이 비어 있는 고정 단가 줄이 있습니다.`);
       if (r.price && r.price.kind === 'per_page' && r.price.rate == null) problems.push(`단가표 · ${typeName(r.type_id)}: 페이지당 금액이 비어 있는 줄이 있습니다.`);
     });
@@ -601,6 +606,7 @@
     const { res, data } = await fetchJson('/api/order-settings');
     if (!res.ok || !data) { toast('설정을 불러오지 못했습니다.', 'error'); return; }
     state.meta = data.meta;
+    OF.fillDatalist('dl-extra-names', state.meta.extra_presets || []);
     applyLoaded(data.settings);
   }
 

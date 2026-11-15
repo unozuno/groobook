@@ -345,3 +345,39 @@ def test_multi_extras_by_campus(settings):
     assert res.ok and "EXTRA_CAMPUS_UNKNOWN" in _codes(res)
     by = {n.campus: n for n in order.deliveries}
     assert by["평촌캠퍼스"].extras == [] and [e.name for e in by["분당캠퍼스"].extras] == ["택배비"]
+
+
+def _extra_settings(settings):
+    settings["price_rules"] = settings["price_rules"] + [
+        {"id": "e1", "type_id": "extra", "product": "택배비", "campuses": ["평촌캠퍼스"], "price": {"kind": "fixed", "amount": 4000}},
+        {"id": "e2", "type_id": "extra", "product": "택배비", "campuses": [], "price": {"kind": "fixed", "amount": 3000}},
+        {"id": "e3", "type_id": "extra", "product": "디자인비", "campuses": [], "price": None},
+    ]
+    return settings
+
+
+def test_extra_unit_price_auto_from_price_table(settings):
+    s = _extra_settings(settings)
+    res, order = validate(base_request(extras=[{"name": "택배비", "qty": "1", "unit_price": ""}]), s)
+    assert res.ok and order.deliveries[0].extras[0].unit_price == 4000          # 평촌캠퍼스 전용 줄
+    res, order = validate(base_request(campus="분당캠퍼스", extras=[{"name": "택배비", "qty": "2"}]), s)
+    assert order.deliveries[0].extras[0].unit_price == 3000                      # 일반 줄
+
+
+def test_extra_typed_price_beats_table_and_manual_rows_need_price(settings):
+    s = _extra_settings(settings)
+    res, order = validate(base_request(extras=[{"name": "택배비", "qty": "1", "unit_price": "9000"}]), s)
+    assert order.deliveries[0].extras[0].unit_price == 9000
+    res, order = validate(base_request(extras=[{"name": "디자인비", "qty": "1"}, {"name": "퀵배송비", "qty": "1"}]), s)
+    assert order is None and [e.path for e in res.errors] == ["extras[0].unit_price", "extras[1].unit_price"]
+
+
+def test_extra_auto_price_per_campus_in_multi(settings):
+    s = _extra_settings(settings)
+    req = base_request(order_type="multi", multi_name="묶음", items=[{"name": "A", "color": "2", "unit_price": "1000"}],
+                       distribution=[{"campus": "평촌캠퍼스", "qtys": ["10"]}, {"campus": "분당캠퍼스", "qtys": ["5"]}],
+                       extras_by_campus=[{"campus": "평촌캠퍼스", "extras": [{"name": "택배비", "qty": "1"}]},
+                                         {"campus": "분당캠퍼스", "extras": [{"name": "택배비", "qty": "1"}]}])
+    res, order = validate(req, s)
+    by = {n.campus: n.extras[0].unit_price for n in order.deliveries}
+    assert by == {"평촌캠퍼스": 4000, "분당캠퍼스": 3000}

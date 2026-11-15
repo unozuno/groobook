@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from processors.order_form.models import DeliveryLine, Item
-from processors.order_form.pricing_models import DELIVERY_TYPE_ID
+from processors.order_form.pricing_models import DELIVERY_TYPE_ID, EXTRA_TYPE_ID
 
 
 @dataclass
@@ -58,6 +58,22 @@ def _quote_delivery(item: Item, campus: str, rules: list[dict]) -> PriceQuote:
     if named:
         return PriceQuote("manual", reason=f"'{item.name}' 은(는) 이 납품학원의 단가가 없어 직접 입력해야 합니다.")
     return PriceQuote("manual", reason="납품서 단가표에 없는 제품이라 단가를 직접 입력해야 합니다.")
+
+
+def quote_extra(name: str, campus: str, rules: list[dict]) -> PriceQuote:
+    """납품서 추가 항목(택배비 등): 항목명이 같고 납품학원이 맞는 첫 규칙. 규칙이 없으면 직접 입력."""
+    key = _norm(name)
+    named = [r for r in rules if r["type_id"] == EXTRA_TYPE_ID and _norm(r.get("product", "")) == key]
+    for rule in named:
+        campuses = {_norm(c) for c in rule.get("campuses", [])}
+        if campuses and _norm(campus) not in campuses:
+            continue
+        if rule["price"] is None:
+            return PriceQuote("manual", rule_id=rule["id"], reason=f"'{name}' 은(는) 단가를 직접 입력해야 합니다.")
+        return PriceQuote("auto", price=rule["price"]["amount"], rule_id=rule["id"])
+    if named:
+        return PriceQuote("manual", reason=f"'{name}' 은(는) 이 납품학원의 단가가 없어 직접 입력해야 합니다.")
+    return PriceQuote("manual", reason=f"'{name}' 은(는) 추가 항목 단가표에 없어 단가를 직접 입력해야 합니다.")
 
 
 def quote(mode: str, type_id: Optional[str], type_name: str, spec: dict[str, str],

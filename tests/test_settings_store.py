@@ -301,5 +301,30 @@ def test_invalid_delivery_rule_rejected(mutate, fragment):
 def test_product_not_allowed_on_normal_rule():
     s = build_seed_settings()
     s["price_rules"][0]["product"] = "대봉투"
-    with pytest.raises(SettingsValidationError, match="납품서 단가에만"):
+    with pytest.raises(SettingsValidationError, match="납품서·추가 항목 단가에만"):
         validate_settings(s)
+
+
+def _extra_rule(rid, product, amount, campuses=()):
+    return {"id": rid, "type_id": "extra", "product": product, "campuses": list(campuses),
+            "price": None if amount is None else {"kind": "fixed", "amount": amount}}
+
+
+def test_extra_price_rules_are_kept_and_validated():
+    s = build_seed_settings()
+    s["price_rules"] += [_extra_rule("e1", "택배비", 3000), _extra_rule("e2", "디자인비", None)]
+    out = validate_settings(s)
+    assert [r["product"] for r in out["price_rules"] if r["type_id"] == "extra"] == ["택배비", "디자인비"]
+    s["price_rules"][-1]["product"] = " "
+    with pytest.raises(SettingsValidationError, match="항목명"):
+        validate_settings(s)
+    s["price_rules"][-1].update(product="퀵", price={"kind": "per_page", "rate": 1})
+    with pytest.raises(SettingsValidationError, match="고정 금액 또는 직접 입력"):
+        validate_settings(s)
+
+
+def test_extra_rules_survive_type_deletion():
+    s = build_seed_settings()
+    s["price_rules"].append(_extra_rule("e1", "택배비", 3000))
+    s["types"] = [t for t in s["types"] if t["id"] != "poster"]
+    assert any(r["type_id"] == "extra" for r in validate_settings(s)["price_rules"])

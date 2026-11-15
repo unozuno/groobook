@@ -255,3 +255,15 @@ def test_generate_extras_missing_price_returns_422(client):
     res = client.post("/api/order-form/generate", json={"order": req})
     assert res.status_code == 422
     assert any(e["code"] == "EXTRA_PRICE_REQUIRED" for e in res.json()["errors"])
+
+
+def test_price_quote_returns_extra_quotes(client):
+    settings = client.get("/api/order-settings").json()["settings"]
+    settings["price_rules"].append({"id": "e1", "type_id": "extra", "product": "택배비", "campuses": [],
+                                    "price": {"kind": "fixed", "amount": 3000}, "when": {}})
+    assert client.put("/api/order-settings", json={"settings": settings,
+                                                    "expected_updated_at": settings.get("updated_at")}).status_code == 200
+    req = make_request(extras=[{"name": "택배비"}, {"name": "퀵"}, {"name": ""}]).model_dump()
+    body = client.post("/api/order-form/price-quote", json={"order": req}).json()
+    assert [(e or {}).get("status") for e in body["extras"]] == ["auto", "manual", None]
+    assert body["extras"][0]["price"] == 3000

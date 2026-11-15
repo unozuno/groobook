@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from processors.order_form.models import Item
-from processors.order_form.pricing import quote
+from processors.order_form.pricing import quote, quote_extra
 from processors.order_form.seed_prices import SEED_PRICE_RULES
 
 RULES = SEED_PRICE_RULES
@@ -170,3 +170,26 @@ def test_every_sheet_row_matches_its_rule_and_is_not_shadowed():
             a, b = map(int, re.fullmatch(r"페이지\*(\d+)\+(\d+)", raw).groups())
             expected = it.pages * a + b
         assert (r.status, r.price) == ("auto", expected), (rule["id"], raw)
+
+
+# ───── 납품서 추가 항목 단가 ─────
+
+def _extra_rules():
+    def r(rid, product, amount, campuses=()):
+        return {"id": rid, "type_id": "extra", "product": product, "campuses": list(campuses),
+                "price": None if amount is None else {"kind": "fixed", "amount": amount}}
+    return [r("e1", "택배비", 4000, ["분당캠퍼스"]), r("e2", "택배비", 3000), r("e3", "디자인비", None)]
+
+
+def test_extra_quote_campus_rule_first_then_general():
+    rules = _extra_rules()
+    assert quote_extra("택배비", "분당캠퍼스", rules).price == 4000
+    assert quote_extra("택 배비", "평촌캠퍼스", rules).price == 3000      # 공백 무시, 학원 한정 줄이 아니면 일반 줄
+
+
+def test_extra_quote_manual_cases():
+    rules = _extra_rules()
+    assert quote_extra("디자인비", "분당캠퍼스", rules).status == "manual"       # 직접 입력 줄
+    assert "단가표에 없어" in quote_extra("퀵배송비", "분당캠퍼스", rules).reason
+    only_campus = [r for r in rules if r["id"] == "e1"]
+    assert "이 납품학원의 단가가 없어" in quote_extra("택배비", "평촌캠퍼스", only_campus).reason

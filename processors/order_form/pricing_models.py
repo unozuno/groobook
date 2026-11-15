@@ -7,6 +7,9 @@ from processors.order_form.fields import FIELD_IDS
 
 
 DELIVERY_TYPE_ID = "delivery"   # 제작 종류가 아닌 예약 id: 납품서(납품서 모드)의 제품별 단가
+EXTRA_TYPE_ID = "extra"         # 예약 id: 납품서 추가 항목(택배비 등)의 항목별 단가
+NAMED_TYPE_IDS = (DELIVERY_TYPE_ID, EXTRA_TYPE_ID)   # 제품명(항목명) + 납품학원으로 찾는 단가표
+_NAMED_LABEL = {DELIVERY_TYPE_ID: "납품서", EXTRA_TYPE_ID: "추가 항목"}
 
 
 class PriceFormula(BaseModel):
@@ -43,7 +46,8 @@ class PriceRule(BaseModel):
     qty_max: Optional[int] = Field(default=None, ge=0)
     pages: Optional[int] = Field(default=None, ge=0)           # 페이지합계가 정확히 이 값일 때만
     price: Optional[PriceFormula] = None
-    # 납품서(type_id == 'delivery') 전용: 제품명이 같고, 납품학원이 campuses 중 하나(비어 있으면 모든 납품학원)
+    # 납품서·추가 항목(type_id == 'delivery' | 'extra') 전용: 제품명(항목명)이 같고,
+    # 납품학원이 campuses 중 하나(비어 있으면 모든 납품학원)
     product: str = ""
     campuses: list[str] = Field(default_factory=list)
 
@@ -62,12 +66,13 @@ class PriceRule(BaseModel):
             raise ValueError(f"단가 규칙 {self.id}: 수량 하한이 상한보다 큽니다.")
         self.product = self.product.strip()
         self.campuses = [c.strip() for c in self.campuses if c and c.strip()]
-        if self.type_id == DELIVERY_TYPE_ID:
+        if self.type_id in NAMED_TYPE_IDS:
+            label = _NAMED_LABEL[self.type_id]
             if not self.product:
-                raise ValueError("납품서 단가 줄에 제품명이 비어 있습니다.")
+                raise ValueError(f"{label} 단가 줄에 {'제품명' if self.type_id == DELIVERY_TYPE_ID else '항목명'}이 비어 있습니다.")
             if self.price is not None and self.price.kind != "fixed":
-                raise ValueError(f"납품서 '{self.product}' 는 고정 금액 또는 직접 입력만 쓸 수 있습니다.")
+                raise ValueError(f"{label} '{self.product}' 는 고정 금액 또는 직접 입력만 쓸 수 있습니다.")
             self.when, self.qty_min, self.qty_max, self.pages = {}, None, None, None
         elif self.product or self.campuses:
-            raise ValueError(f"단가 규칙 {self.id}: 제품명·납품학원은 납품서 단가에만 쓸 수 있습니다.")
+            raise ValueError(f"단가 규칙 {self.id}: 제품명·납품학원은 납품서·추가 항목 단가에만 쓸 수 있습니다.")
         return self

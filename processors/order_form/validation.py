@@ -14,7 +14,7 @@ from processors.order_form.fields import FIELD_IDS
 from processors.order_form.models import (
     DeliveryLine, DeliveryNote, DistributionRow, Extra, Item, Order, OrderRequest,
 )
-from processors.order_form.pricing import fill_unit_prices, quote
+from processors.order_form.pricing import fill_unit_prices, quote, quote_extra
 
 _INT_RE = re.compile(r"-?\d+(\.0+)?")
 _ITEM_NUM_LABELS = {"qty": "발주수량", "mono": "1도", "insert": "청간지", "color": "4도",
@@ -89,9 +89,9 @@ def _blank(v) -> bool:
     return v is None or str(v).strip() == ""
 
 
-def _parse_extras(raw: list, path: str, res: "ValidationResult") -> list[Extra]:
+def _parse_extras(raw: list, path: str, res: "ValidationResult", campus: str, rules: list[dict]) -> list[Extra]:
     """납품서 추가 항목. 완전히 빈 줄은 무시하고, 값이 있으면 항목명을 요구한다.
-    추가 항목에는 자동 단가가 없으므로 수량이 있으면 단가도 필수."""
+    단가는 입력값 > 추가 항목 단가표(항목명·납품학원) 자동 단가 > (수량이 있으면) 오류."""
     out: list[Extra] = []
     for i, ex in enumerate(raw):
         if all(_blank(getattr(ex, k)) for k in ("name", "qty", "unit_price")):
@@ -110,8 +110,12 @@ def _parse_extras(raw: list, path: str, res: "ValidationResult") -> list[Extra]:
             vals[key] = val
         if not vals["qty"]:
             res.warn("EXTRA_QTY_EMPTY", f"{p}.qty", f"추가 항목 {i + 1}번의 수량이 비어 있거나 0 입니다.")
-        elif _blank(ex.unit_price):
-            res.error("EXTRA_PRICE_REQUIRED", f"{p}.unit_price", f"추가 항목 {i + 1}번의 단가를 입력해 주세요.")
+        elif _blank(ex.unit_price) and name:
+            q = quote_extra(name, campus, rules)
+            if q.status == "auto":
+                vals["unit_price"] = q.price
+            else:
+                res.error("EXTRA_PRICE_REQUIRED", f"{p}.unit_price", f"추가 항목 {i + 1}번: {q.reason}")
         out.append(Extra(name=name, qty=vals["qty"], unit_price=vals["unit_price"]))
     return out
 
@@ -302,8 +306,8 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
     if multi:
         by_campus = {n.campus: n for n in deliveries}
         for j, ce in enumerate(req.extras_by_campus):
-            extras = _parse_extras(ce.extras, f"extras_by_campus[{j}].extras", res)
             c = ce.campus.strip()
+            extras = _parse_extras(ce.extras, f"extras_by_campus[{j}].extras", res, c, price_rules)
             if not extras:
                 continue
             if c in by_campus:
@@ -312,7 +316,7 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
                 res.warn("EXTRA_CAMPUS_UNKNOWN", f"extras_by_campus[{j}].campus",
                          f"추가 항목의 학원 '{c}' 은(는) 납품서가 없어 반영되지 않습니다.")
     elif deliveries:
-        deliveries[0].extras = _parse_extras(req.extras, "extras", res)
+        deliveries[0].extras = _parse_extras(req.extras, "extras", res, deliveries[0].campus, price_rules)
 
     if not res.ok:
         return res, None
