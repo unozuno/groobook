@@ -881,6 +881,7 @@ header {
 .spec-table td { padding: 0 6px 0 0; vertical-align: top; }
 
 .spec-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -891,6 +892,7 @@ header {
   align-items: center;
   gap: 6px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .follow-badge {
@@ -929,11 +931,25 @@ header {
   opacity: 0.55;
 }
 
+/* 내지 따름 안내: 버튼을 눌렀을 때만 입력칸 위에 떠서 보이고, 표 레이아웃은 밀지 않는다 */
 .follow-note {
-  color: var(--danger, #c0392b);
+  position: absolute;
+  left: 4px;
+  top: 28px;   /* 라벨 줄 아래, 입력칸 위에 겹쳐 떠서 다음 줄 라벨을 가리지 않는다 */
+  z-index: 5;
+  padding: 3px 8px;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
 }
+.follow-note:empty { display: none; }
 
 /* 품목 · 분배 표 */
 .data-table {
