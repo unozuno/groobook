@@ -7,17 +7,21 @@ from processors.order_form.fields import FIELD_IDS, SIZE_FOLLOW_FIELDS, SIZE_SOU
 
 
 def type_defaults(type_cfg: dict) -> dict[str, str]:
-    """종류 선택 직후의 사양 값. 기본값이 없는 사이즈 칸은 내지 사이즈를 따른다."""
-    spec = {fid: (type_cfg["fields"][fid]["default"] or "") for fid in FIELD_IDS}
-    for fid in SIZE_FOLLOW_FIELDS:
-        if type_cfg["fields"][fid]["default"] is None:
-            spec[fid] = spec[SIZE_SOURCE_FIELD]
-    return spec
+    """종류 선택 직후의 사양 값. 기본값이 없는 칸(간지·표지 사이즈 포함)은 빈칸이고,
+    '내지 따름' 은 항상 꺼진 채로 시작한다."""
+    return {fid: (type_cfg["fields"][fid]["default"] or "") for fid in FIELD_IDS}
 
 
-def follow_fields(type_cfg: dict) -> set[str]:
-    """내지 사이즈를 따라가는 필드 집합 (사용자가 직접 수정하기 전까지)."""
-    return {fid for fid in SIZE_FOLLOW_FIELDS if type_cfg["fields"][fid]["default"] is None}
+def norm_option(v: str) -> str:
+    return "".join(str(v or "").split())
+
+
+def can_follow(spec: dict[str, str], type_cfg: dict, fid: str) -> bool:
+    """내지 따름을 켤 수 있는가 — 현재 내지 사이즈 값이 해당 칸의 옵션 목록에 있어야 한다."""
+    src = norm_option(spec.get(SIZE_SOURCE_FIELD))
+    if not src or fid not in SIZE_FOLLOW_FIELDS:
+        return False
+    return any(norm_option(o) == src for o in type_cfg["fields"][fid]["options"])
 
 
 def apply_rules(spec: dict[str, str], type_cfg: dict, rules: list[dict],

@@ -910,6 +910,17 @@ header {
   border-color: var(--border);
 }
 
+.follow-badge.unavailable {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.follow-note {
+  color: var(--danger, #c0392b);
+  font-size: 11px;
+  font-weight: 400;
+}
+
 /* 품목 · 분배 표 */
 .data-table {
   width: 100%;

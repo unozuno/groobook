@@ -1,7 +1,7 @@
 import pytest
 
 from processors.order_form.models import OrderRequest
-from processors.order_form.rules import apply_rules, follow_fields, type_defaults
+from processors.order_form.rules import apply_rules, can_follow, type_defaults
 from processors.order_form.seed import build_seed_settings
 from processors.order_form.validation import parse_int, validate
 
@@ -232,16 +232,27 @@ def _type(settings, type_id):
     return next(t for t in settings["types"] if t["id"] == type_id)
 
 
-def test_type_defaults_follow_inner_size(settings):
+def test_type_defaults_leave_follow_sizes_blank(settings):
     tb = _type(settings, "textbook")
     spec = type_defaults(tb)
     assert spec["inner_size"] == "210*297"
-    assert spec["insert_size"] == "210*297" and spec["cover_size"] == "210*297"
-    assert follow_fields(tb) == {"insert_size", "cover_size"}
+    assert spec["insert_size"] == "" and spec["cover_size"] == ""      # 내지 따름은 기본 꺼짐 → 빈칸
 
     note = _type(settings, "note")
-    assert type_defaults(note)["cover_size"] == "210*297"
-    assert follow_fields(note) == {"insert_size"}
+    assert type_defaults(note)["cover_size"] == "210*297"              # 종류 기본값이 있으면 그대로
+    assert type_defaults(note)["insert_size"] == ""
+
+
+def test_can_follow_requires_inner_size_in_field_options(settings):
+    tb = _type(settings, "textbook")
+    spec = type_defaults(tb)
+    for fid in ("insert_size", "cover_size"):
+        assert can_follow(spec, tb, fid) == any(o.replace(" ", "") == "210*297" for o in tb["fields"][fid]["options"])
+    spec["inner_size"] = "999*999"
+    assert not can_follow(spec, tb, "insert_size") and not can_follow(spec, tb, "cover_size")
+    spec["inner_size"] = ""
+    assert not can_follow(spec, tb, "insert_size")
+    assert not can_follow(spec, tb, "inner_size")
 
 
 def test_spring_binding_rule(settings):

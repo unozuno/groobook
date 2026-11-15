@@ -85,10 +85,16 @@
   function typeDefaults(t) {
     const spec = {};
     for (const f of fieldIds()) spec[f] = (t.fields[f] && t.fields[f].default) || '';
-    for (const f of SIZE_FOLLOW_FIELDS) {
-      if (t.fields[f] && t.fields[f].default == null) spec[f] = spec[SIZE_SOURCE];
-    }
-    return spec;
+    return spec;   // 기본값 없는 간지·표지 사이즈는 빈칸 ('내지 따름' 은 항상 꺼진 채 시작)
+  }
+
+  // '내지 따름' 은 현재 내지 사이즈 값이 해당 칸의 옵션 목록에 있을 때만 켤 수 있다 (rules.can_follow 와 동일)
+  const normOpt = v => String(v || '').replace(/\s+/g, '');
+  function canFollow(fid) {
+    const t = currentType();
+    const src = normOpt(state.spec[SIZE_SOURCE]);
+    if (!t || state.mode !== 'order' || !src) return false;
+    return ((t.fields[fid] && t.fields[fid].options) || []).some(o => normOpt(o) === src);
   }
 
   function applyRules() {
@@ -116,7 +122,7 @@
     state.specTouched.clear();
     if (t && state.mode === 'order') {
       state.spec = typeDefaults(t);
-      for (const f of SIZE_FOLLOW_FIELDS) state.sizeFollow[f] = t.fields[f].default == null;
+      for (const f of SIZE_FOLLOW_FIELDS) state.sizeFollow[f] = false;
       applyRules();
     } else {
       for (const f of fieldIds()) state.spec[f] = '';
@@ -181,7 +187,8 @@
       for (const fid of g.fields) {
         const td = document.createElement('td');
         const follow = SIZE_FOLLOW_FIELDS.includes(fid)
-          ? `<button type="button" class="follow-badge off" data-follow="${fid}" title="내지 사이즈를 따라갑니다">내지 따름</button>` : '';
+          ? `<button type="button" class="follow-badge off" data-follow="${fid}" title="내지 사이즈를 따라갑니다">내지 따름</button>
+             <small class="follow-note" data-follow-note="${fid}"></small>` : '';
         td.innerHTML = `<div class="spec-cell">
             <span class="field-label">${esc(fieldLabel(fid))} ${follow}</span>
             <input type="text" data-field="${fid}" data-path="spec.${fid}">
@@ -197,6 +204,11 @@
     for (const btn of body.querySelectorAll('[data-follow]')) {
       btn.addEventListener('click', () => {
         const f = btn.dataset.follow;
+        if (!state.sizeFollow[f] && !canFollow(f)) {
+          if (isBlank(state.spec[SIZE_SOURCE])) toast('내지 사이즈를 먼저 입력해 주세요.');
+          updateSpecInputs();
+          return;
+        }
         state.sizeFollow[f] = !state.sizeFollow[f];
         if (state.sizeFollow[f]) {
           state.specTouched.delete(f);
@@ -212,7 +224,11 @@
     state.spec[fid] = value;
     state.specTouched.add(fid);
     if (fid === SIZE_SOURCE) {
-      for (const f of SIZE_FOLLOW_FIELDS) if (state.sizeFollow[f]) state.spec[f] = value;
+      for (const f of SIZE_FOLLOW_FIELDS) {
+        if (!state.sizeFollow[f]) continue;
+        if (canFollow(f)) state.spec[f] = value;
+        else state.sizeFollow[f] = false;    // 옵션에 없는 내지 값이면 따름 자동 해제 (현재 값은 그대로)
+      }
     }
     if (SIZE_FOLLOW_FIELDS.includes(fid)) state.sizeFollow[fid] = false;
     applyRules();
@@ -226,9 +242,19 @@
       if (f !== skip && input.value !== (state.spec[f] || '')) input.value = state.spec[f] || '';
     }
     for (const btn of $('specBody').querySelectorAll('[data-follow]')) {
-      const on = !!state.sizeFollow[btn.dataset.follow];
+      const f = btn.dataset.follow;
+      const on = !!state.sizeFollow[f];
+      const unavailable = !on && !canFollow(f);
       btn.classList.toggle('off', !on);
-      btn.title = on ? '내지 사이즈를 따라가는 중입니다. 눌러서 해제' : '내지 사이즈를 따라가지 않습니다. 눌러서 다시 연결';
+      btn.classList.toggle('unavailable', unavailable);
+      btn.title = on ? '내지 사이즈를 따라가는 중입니다. 눌러서 해제'
+        : unavailable ? '선택할 수 없습니다' : '내지 사이즈를 따라가지 않습니다. 눌러서 연결';
+      const note = $('specBody').querySelector(`[data-follow-note="${f}"]`);
+      if (note) {
+        const inner = (state.spec[SIZE_SOURCE] || '').trim();
+        note.textContent = unavailable && inner && state.mode === 'order'
+          ? `${fieldLabel(f)} 옵션에 '${inner}' 이(가) 없어 선택할 수 없습니다` : '';
+      }
     }
   }
 
