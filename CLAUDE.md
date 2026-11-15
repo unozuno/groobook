@@ -157,7 +157,7 @@ All task state lives in two in-memory dicts in `main.py` (`tasks`, `email_scans`
 
 - Reference workbook: `sample/발주서 단일화.xlsx` (git-ignored). Sheet `발주서(sample)` / `납품서((sample)` define the output layout; `발주서단일화` holds the option matrix; `인수처주소및담당자` the address book.
 - Output deviations from the sample (intentional): no yellow input-cell fills (white; only the green header row keeps a fill); 표지 row has 사이즈/코팅/동판 in E7/F7/G7; row 9 = 생산처 전달사항 (red, bold 14, merged B9:J9); 페이지합계 I column is a formula; the `/8000` cell is omitted; 공급액 = `=IF(AND(C>0,E<>""),C*E,"")`; no external links.
-- Item rows: 발주서 = exactly as many as items (min 1); 납품서 = 5 rows for ≤5 items, 10 for 6–10, otherwise item count (`delivery_row_count`); totals row formulas follow. 발주서/납품서 표 바깥 테두리는 medium, 안쪽은 thin; 발주서 열 너비 C=400px·A~J 나머지 130px. Numeric blanks are written as `None`, never 0.
+- Item rows: 발주서 = exactly as many as items (min 1); 납품서 = 5 rows for ≤5 items, 10 for 6–10, otherwise item count (`delivery_row_count`); totals row formulas follow. 발주서/납품서 표 바깥 테두리는 medium, 안쪽은 thin; 발주서 열 너비(엑셀 단위) C=33·A~J 나머지 11; 납기일자 라벨 E2, 값 F2:H2 병합(가운데). Numeric blanks are written as `None`, never 0.
 - 간지/표지 사이즈 follow 내지 사이즈 **only when that type's default is `null`** (the sample's `=I2` exists for 교재 only).
 - Filenames: `{YYMMDD 오늘, Asia/Seoul} 그루북 {학원|다중이름} {종류}발주.xlsx`; 납품서 mode: `… {납품학원} 납품서.xlsx`. Sheet names sanitized to Excel rules (31 chars, no `\ / ? * [ ] :`) and de-duplicated with ` (2)`.
 - Validation codes (`validation.py`) are mirrored in `order_form.js` — change both together.

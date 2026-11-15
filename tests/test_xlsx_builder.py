@@ -21,7 +21,7 @@ def test_single_order_layout(sample_order):
     # 입력칸 노란 배경은 쓰지 않는다 (머리글 연두색만 유지)
     assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=1, max_row=9) for c in row)
     assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=11, max_row=21, min_col=1, max_col=14) for c in row)
-    assert ws["C2"].value == datetime(2026, 11, 8) and ws["H2"].value == datetime(2026, 11, 10)
+    assert ws["C2"].value == datetime(2026, 11, 8) and ws["F2"].value == datetime(2026, 11, 10)
     assert ws["C3"].value == "평촌캠퍼스" and ws["I3"].value == 2105
     assert (ws["C4"].value, ws["D4"].value) == ("무선제본", "좌철")
     assert (ws["C5"].value, ws["D5"].value, ws["E5"].value) == ("80g 미색모조", "양면 2도", "210*297")
@@ -150,14 +150,15 @@ def test_order_sheet_format(sample_order):
     _, wb = _wb(sample_order)
     ws = wb["발주서"]
     # 날짜 중앙, 제작 종류 빨강, 납기일자 라벨은 E2 단일 셀
-    assert ws["C2"].alignment.horizontal == "center" and ws["H2"].alignment.horizontal == "center"
+    assert ws["C2"].alignment.horizontal == "center" and ws["F2"].alignment.horizontal == "center"
     assert ws["D1"].font.color.rgb.endswith("FF0000")
-    assert ws["E2"].value == "납기일자" and ws["F2"].value is None
-    assert all("F2" not in str(r) and "G2" not in str(r) for r in ws.merged_cells.ranges)
-    # 열 너비: C 400px, A~J 나머지 130px
-    assert ws.column_dimensions["C"].width == pytest.approx((400 - 5) / 7, abs=0.01)
+    assert ws["E2"].value == "납기일자" and ws["H2"].value is None
+    merged = [str(r) for r in ws.merged_cells.ranges]
+    assert "F2:H2" in merged and "H2:J2" not in merged
+    # 열 너비(엑셀 단위): C 33, A~J 나머지 11
+    assert ws.column_dimensions["C"].width == 33
     for col in "ABDEFGHIJ":
-        assert ws.column_dimensions[col].width == pytest.approx((130 - 5) / 7, abs=0.01)
+        assert ws.column_dimensions[col].width == 11
     # 표 바깥(머리글 10행 ~ 합계 14행, A~J)은 medium, 안쪽은 thin
     assert _sides(ws["A10"]) == ("medium", "thin", "medium", "thin")
     assert _sides(ws["J10"]) == ("thin", "medium", "medium", "thin")

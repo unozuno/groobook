@@ -94,11 +94,6 @@ def delivery_total_row(n_lines: int) -> int:
     return DELIV_FIRST_ITEM_ROW + delivery_row_count(n_lines)
 
 
-def _px_to_width(px: int) -> float:
-    """엑셀 열 너비(문자 수)로 환산 — 기본 글꼴 기준 px = 너비*7 + 5."""
-    return round((px - 5) / 7, 2)
-
-
 def _outline_medium(ws, r1: int, c1: int, r2: int, c2: int) -> None:
     """영역의 바깥 테두리만 굵게(medium) — 안쪽 선과 셀 서식은 그대로 둔다."""
     for r in range(r1, r2 + 1):
@@ -116,9 +111,8 @@ def _outline_medium(ws, r1: int, c1: int, r2: int, c2: int) -> None:
 # ───────── 발주서 ─────────
 
 def write_order_sheet(ws, order: Order) -> None:
-    w130 = _px_to_width(130)
-    widths = {"A": w130, "B": w130, "C": _px_to_width(400), "D": w130, "E": w130, "F": w130,
-              "G": w130, "H": w130, "I": w130, "J": w130, "K": 9, "L": 9, "M": 9, "N": 9}
+    widths = {"C": 33, "K": 9, "L": 9, "M": 9, "N": 9}
+    widths.update({col: 11 for col in "ABDEFGHIJ"})   # 엑셀 열 너비 단위
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
@@ -134,8 +128,8 @@ def write_order_sheet(ws, order: Order) -> None:
     _set(ws, 2, 2, "접수일자")
     _set(ws, 2, 3, order.received_date, fmt=DATE_FMT)
     _set(ws, 2, 5, "납기일자")
-    ws.merge_cells("H2:J2")
-    _set(ws, 2, 8, order.due_date, fmt=DATE_FMT)
+    ws.merge_cells("F2:H2")
+    _set(ws, 2, 6, order.due_date, fmt=DATE_FMT)
 
     _set(ws, 3, 2, "납품학원")
     _set(ws, 3, 3, order.campus or None)
