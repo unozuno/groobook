@@ -149,6 +149,41 @@ window.OF = (() => {
     });
   }
 
+  /**
+   * 체크박스 목록에서 여러 개를 고르는 모달. options: [{value, label}].
+   * resolve(선택한 value 배열) — 취소하면 null.
+   */
+  function checklistDialog({ title, message = '', options, okText = '확인', cancelText = '취소' }) {
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal-box">
+          <h3>${esc(title)}</h3>
+          ${message ? `<p class="modal-subtitle">${esc(message)}</p>` : ''}
+          <div class="check-list">
+            <label class="check-all"><input type="checkbox" data-all> 전체 선택</label>
+            ${options.map((o, k) => `<label><input type="checkbox" data-k="${k}"> ${esc(o.label)}</label>`).join('')}
+          </div>
+          <div class="modal-actions">
+            <button class="btn-secondary" data-act="cancel">${esc(cancelText)}</button>
+            <button class="btn-primary" data-act="ok" disabled>${esc(okText)}</button>
+          </div>
+        </div>`;
+      const boxes = [...overlay.querySelectorAll('[data-k]')];
+      const all = overlay.querySelector('[data-all]');
+      const okBtn = overlay.querySelector('[data-act="ok"]');
+      const sync = () => { okBtn.disabled = !boxes.some(b => b.checked); };
+      all.addEventListener('change', () => { boxes.forEach(b => { b.checked = all.checked; }); sync(); });
+      boxes.forEach(b => b.addEventListener('change', () => { all.checked = boxes.every(x => x.checked); sync(); }));
+      const done = v => { overlay.remove(); resolve(v); };
+      okBtn.addEventListener('click', () => done(boxes.filter(b => b.checked).map(b => options[Number(b.dataset.k)].value)));
+      overlay.querySelector('[data-act="cancel"]').addEventListener('click', () => done(null));
+      overlay.addEventListener('click', e => { if (e.target === overlay) done(null); });
+      document.body.appendChild(overlay);
+    });
+  }
+
   function uid(prefix = 'id') {
     return prefix + '_' + Math.random().toString(16).slice(2, 10);
   }
@@ -168,5 +203,5 @@ window.OF = (() => {
   }
 
   return { esc, fetchJson, postJson, filenameFromDisposition, downloadBlob, fillDatalist,
-           makeCombobox, debounce, toast, confirmDialog, choiceDialog, planItemsHtml, uid, isBlank, parseInt0 };
+           makeCombobox, debounce, toast, confirmDialog, choiceDialog, checklistDialog, planItemsHtml, uid, isBlank, parseInt0 };
 })();

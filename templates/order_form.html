@@ -105,6 +105,13 @@
         </div>
       </section>
 
+      <!-- 5-2. 납품서 추가 항목 -->
+      <section class="banding-section" id="extrasSection">
+        <p class="section-title">추가 항목 <small style="font-weight:500;color:var(--text-muted);">납품서에만 들어갑니다</small></p>
+        <p class="hint" style="margin:-8px 0 12px;">택배비·디자인비처럼 품목이 아닌 청구 항목입니다. 납품서의 품목 줄 바로 뒤에 이어서 붙고 발주서에는 들어가지 않습니다. 항목은 목록에서 고르거나 직접 입력할 수 있고, 공급액은 수량 × 단가로 계산됩니다.</p>
+        <div id="extrasWrap"></div>
+      </section>
+
       <!-- 6. 검증 결과 -->
       <section class="banding-section" id="issueSection">
         <p class="section-title">검증 결과</p>
@@ -148,6 +155,7 @@
   <datalist id="dl-types"></datalist>
   <datalist id="dl-campuses"></datalist>
   <datalist id="dl-products"></datalist>
+  <datalist id="dl-extras"></datalist>
 
   <script src="/static/js/order_common.js"></script>
   <script src="/static/js/order_form.js"></script>

@@ -105,12 +105,12 @@ def _parse_extras(raw: list, path: str, res: "ValidationResult") -> list[Extra]:
             ok, val = parse_int(getattr(ex, key))
             if not ok:
                 res.error("EXTRA_NUM_INVALID", f"{p}.{key}",
-                          f"추가 항목 {i + 1}번의 {label}은(는) 0 이상의 정수여야 합니다.")
+                          f"추가 항목 {i + 1}번의 {label} 값은 0 이상의 정수여야 합니다.")
                 val = None
             vals[key] = val
         if not vals["qty"]:
             res.warn("EXTRA_QTY_EMPTY", f"{p}.qty", f"추가 항목 {i + 1}번의 수량이 비어 있거나 0 입니다.")
-        elif vals["unit_price"] is None and not _blank(ex.qty):
+        elif _blank(ex.unit_price):
             res.error("EXTRA_PRICE_REQUIRED", f"{p}.unit_price", f"추가 항목 {i + 1}번의 단가를 입력해 주세요.")
         out.append(Extra(name=name, qty=vals["qty"], unit_price=vals["unit_price"]))
     return out

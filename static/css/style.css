@@ -910,6 +910,20 @@ header {
   border-color: var(--border);
 }
 
+.extras-block { margin-bottom: 18px; }
+.extras-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.extras-title { font-size: 13px; font-weight: 700; color: var(--primary); }
+.extras-empty { color: var(--text-faint); font-size: 13px; padding: 8px 0; }
+.extras-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.check-list { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow: auto; margin-bottom: 20px; font-size: 14px; }
+.check-list .check-all { font-weight: 700; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
 .follow-badge.unavailable {
   cursor: not-allowed;
   opacity: 0.55;

@@ -233,3 +233,25 @@ def test_price_quote_for_blank_delivery_uses_receiver(client):
     assert [i["price"] for i in quote("하남크레오")] == [300, None]
     assert [i["price"] for i in quote("분당캠퍼스")] == [200, None]
     assert quote("분당캠퍼스")[1]["status"] == "manual"
+
+
+def test_settings_meta_has_extra_presets(client):
+    presets = client.get("/api/order-settings").json()["meta"]["extra_presets"]
+    assert presets == ["택배비", "퀵배송비", "디자인비", "표지디자인비", "내지디자인비"]
+
+
+def test_generate_with_extras_and_archive(client):
+    req = make_request(extras=[{"name": "택배비", "qty": "1", "unit_price": "3000"}]).model_dump()
+    res = client.post("/api/order-form/generate", json={"order": req})
+    assert res.status_code == 200, res.text
+    ws = load_workbook(BytesIO(res.content))["납품서"]
+    assert (ws["B12"].value, ws["C12"].value, ws["E12"].value) == ("택배비", 1, 3000)   # 품목 3 + 추가 1
+    saved = json.loads(next(orders_dir().glob("*.json")).read_text(encoding="utf-8"))
+    assert saved["order"]["extras"][0]["name"] == "택배비"
+
+
+def test_generate_extras_missing_price_returns_422(client):
+    req = make_request(extras=[{"name": "택배비", "qty": "1", "unit_price": ""}]).model_dump()
+    res = client.post("/api/order-form/generate", json={"order": req})
+    assert res.status_code == 422
+    assert any(e["code"] == "EXTRA_PRICE_REQUIRED" for e in res.json()["errors"])

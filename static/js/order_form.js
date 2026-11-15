@@ -1,7 +1,7 @@
 /* 공통발주서 작성 페이지 */
 (() => {
   const { esc, fetchJson, postJson, filenameFromDisposition, downloadBlob, fillDatalist,
-          makeCombobox, debounce, toast, confirmDialog, choiceDialog, planItemsHtml, uid, isBlank, parseInt0 } = OF;
+          makeCombobox, debounce, toast, confirmDialog, choiceDialog, checklistDialog, planItemsHtml, uid, isBlank, parseInt0 } = OF;
   const $ = id => document.getElementById(id);
 
   const BLANK_ORDER_LABEL = '빈 발주서';
@@ -18,6 +18,7 @@
     spec: {}, specTouched: new Set(), sizeFollow: { insert_size: false, cover_size: false },
     messages: new Set(), messageExtra: '',
     items: [], distribution: [],
+    extras: [], distExtras: {},   // 납품서 추가 항목 (단일 / 다중은 분배표 행 id 별)
     serverIssues: null,
     quotes: [],   // 서버가 계산한 품목별 자동 단가 {status, price, reason} | null (품목 순서)
   };
@@ -25,6 +26,7 @@
   // ───────────── 헬퍼 ─────────────
   const fieldIds = () => state.meta.fields.map(f => f.id);
   const fieldLabel = id => (state.meta.fields.find(f => f.id === id) || {}).label || id;
+  const fieldGroupName = id => (state.meta.groups.find(g => g.fields.includes(id)) || {}).name || fieldLabel(id);
   const typeNames = () => state.settings.types.map(t => t.name);
   const campusNames = () => state.settings.address_book.map(a => a.name);
   const currentType = () => state.settings.types.find(t => t.id === state.typeId) || null;
@@ -68,7 +70,9 @@
   function hasUserContent() {
     return state.specTouched.size > 0
       || state.items.some(it => !itemIsEmptyExceptDefaults(it))
-      || state.distribution.some(d => d.campus || Object.values(d.qtys).some(v => !isBlank(v)));
+      || state.distribution.some(d => d.campus || Object.values(d.qtys).some(v => !isBlank(v)))
+      || state.extras.some(ex => !extraIsEmpty(ex))
+      || Object.values(state.distExtras).some(rows => rows.some(ex => !extraIsEmpty(ex)));
   }
 
   function itemIsEmptyExceptDefaults(it) {
@@ -253,7 +257,7 @@
       if (note) {
         const inner = (state.spec[SIZE_SOURCE] || '').trim();
         note.textContent = unavailable && inner && state.mode === 'order'
-          ? `${fieldLabel(f)} 옵션에 '${inner}' 이(가) 없어 선택할 수 없습니다` : '';
+          ? `${fieldGroupName(f)} 사이즈 옵션에 '${inner}' 이(가) 없어 선택할 수 없습니다` : '';
       }
     }
   }
@@ -505,7 +509,7 @@
       const inp = e.target;
       const d = state.distribution[Number(inp.dataset.j)];
       if (!d) return;
-      if (inp.dataset.campus) d.campus = inp.value;
+      if (inp.dataset.campus) { d.campus = inp.value; updateExtrasTitles(); }
       else if (inp.dataset.item) d.qtys[inp.dataset.item] = inp.value;
       else return;
       state.serverIssues = null;
@@ -515,20 +519,174 @@
     $('distBody').addEventListener('click', e => {
       const btn = e.target.closest('[data-deldist]');
       if (!btn) return;
-      state.distribution.splice(Number(btn.dataset.deldist), 1);
+      const [gone] = state.distribution.splice(Number(btn.dataset.deldist), 1);
+      if (gone) delete state.distExtras[gone.id];
       if (state.distribution.length === 0) state.distribution.push(newDistRow());
       renderDist();
+      renderExtras();
       updateItemsDerived();
       scheduleValidate();
     });
     $('addDistBtn').addEventListener('click', () => {
       state.distribution.push(newDistRow());
       renderDist();
+      renderExtras();
       const rows = $('distBody').children;
       const last = rows[rows.length - 1];
       const first = last && last.querySelector('input[data-campus]');
       if (first) first.focus();
       scheduleValidate();
+    });
+  }
+
+  // ───────────── 렌더링: 납품서 추가 항목 ─────────────
+  // 단일 발주·납품서 모드는 state.extras 한 벌, 다중 발주는 분배표 행(d.id)마다 따로 가진다.
+  const newExtra = () => ({ id: uid('ex'), name: '', qty: '', unitPrice: '' });
+  const extraIsEmpty = ex => isBlank(ex.name) && isBlank(ex.qty) && isBlank(ex.unitPrice);
+  function extraRows(owner) {
+    if (!owner) return state.extras;
+    return state.distExtras[owner] || (state.distExtras[owner] = []);
+  }
+  const extraAmount = ex => {
+    const q = parseInt0(ex.qty).value;
+    const p = parseInt0(ex.unitPrice).value;
+    return q && p != null ? q * p : null;
+  };
+  const distLabel = (d, j) => d.campus.trim() || `학원 ${j + 1}`;
+
+  function extrasBlockHtml(owner, title, j) {
+    const rows = extraRows(owner);
+    const prefix = owner ? `extras_by_campus[${j}].extras` : 'extras';
+    const head = owner ? `<div class="extras-head"><span class="extras-title" data-extras-title="${esc(owner)}">${esc(title)}</span></div>` : '';
+    const body = rows.map((ex, i) => {
+      const path = `${prefix}[${i}]`;
+      const amt = extraAmount(ex);
+      return `<tr>
+        <td class="idx">${i + 1}</td>
+        <td><input type="text" list="dl-extras" autocomplete="off" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="name" data-path="${path}.name" value="${esc(ex.name)}" placeholder="항목 선택 또는 입력"></td>
+        <td><input type="text" class="num" inputmode="numeric" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="qty" data-path="${path}.qty" value="${esc(ex.qty)}"></td>
+        <td><input type="text" class="num" inputmode="numeric" data-owner="${esc(owner || '')}" data-eid="${ex.id}" data-k="unitPrice" data-path="${path}.unit_price" value="${esc(ex.unitPrice)}"></td>
+        <td><input type="text" class="num cell-readonly" readonly tabindex="-1" data-amount="${ex.id}" value="${amt == null ? '' : amt.toLocaleString()}"></td>
+        <td class="act"><button type="button" class="icon-btn danger" data-ex-del="${ex.id}" data-owner="${esc(owner || '')}" title="행 삭제">✕</button></td>
+      </tr>`;
+    }).join('');
+    const table = rows.length ? `<div class="table-wrap" style="margin-bottom:0;"><table class="data-table">
+        <thead><tr><th>#</th><th>항목</th><th>수량</th><th>단가</th><th>공급액</th><th></th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr><td colspan="4">합계</td><td data-extras-total="${esc(owner || '')}">${extrasTotal(rows).toLocaleString()}</td><td></td></tr></tfoot>
+      </table></div>` : '<p class="extras-empty">추가 항목이 없습니다.</p>';
+    const copy = owner && state.distribution.length > 1
+      ? `<button type="button" class="btn-small" data-ex-copy-sel="${esc(owner)}">선택한 학원에 복사…</button>
+         <button type="button" class="btn-small" data-ex-copy-all="${esc(owner)}">전체 학원에 복사</button>` : '';
+    return `<div class="extras-block" data-extras-owner="${esc(owner || '')}">${head}${table}
+      <div class="extras-actions"><button type="button" class="btn-small" data-ex-add="${esc(owner || '')}">+ 항목 추가</button>${copy}</div></div>`;
+  }
+
+  const extrasTotal = rows => rows.reduce((s, ex) => s + (extraAmount(ex) || 0), 0);
+
+  function renderExtras() {
+    const wrap = $('extrasWrap');
+    if (!isMulti()) {
+      wrap.innerHTML = extrasBlockHtml(null, '', 0);
+      return;
+    }
+    wrap.innerHTML = state.distribution.map((d, j) => extrasBlockHtml(d.id, distLabel(d, j), j)).join('');
+  }
+
+  function updateExtrasTitles() {
+    state.distribution.forEach((d, j) => {
+      const el = document.querySelector(`[data-extras-title="${d.id}"]`);
+      if (el) el.textContent = distLabel(d, j);
+    });
+  }
+
+  async function copyExtras(fromId, mode) {
+    const src = extraRows(fromId).filter(ex => !extraIsEmpty(ex));
+    if (!src.length) { toast('복사할 추가 항목이 없습니다.'); return; }
+    const others = state.distribution.map((d, j) => ({ value: d.id, label: distLabel(d, j) })).filter(o => o.value !== fromId);
+    let targets;
+    if (mode === 'all') {
+      const ok = await confirmDialog({
+        title: '전체 학원에 복사',
+        message: `이 학원의 추가 항목 ${src.length}개를 다른 ${others.length}개 학원 모두에 복사합니다. 해당 학원들의 기존 추가 항목은 덮어씁니다.`,
+        okText: '복사', danger: true,
+      });
+      if (!ok) return;
+      targets = others.map(o => o.value);
+    } else {
+      targets = await checklistDialog({
+        title: '선택한 학원에 복사',
+        message: `추가 항목 ${src.length}개를 복사할 학원을 고르세요. 선택한 학원의 기존 추가 항목은 덮어씁니다.`,
+        options: others, okText: '복사',
+      });
+      if (!targets || !targets.length) return;
+    }
+    for (const id of targets) state.distExtras[id] = src.map(ex => ({ ...ex, id: uid('ex') }));
+    renderExtras();
+    state.serverIssues = null;
+    scheduleValidate();
+    toast(`${targets.length}개 학원에 추가 항목을 복사했습니다.`);
+  }
+
+  function bindExtrasEvents() {
+    const wrap = $('extrasWrap');
+    wrap.addEventListener('input', e => {
+      const inp = e.target;
+      if (!inp.dataset.eid) return;
+      const ex = extraRows(inp.dataset.owner || null).find(x => x.id === inp.dataset.eid);
+      if (!ex) return;
+      ex[inp.dataset.k] = inp.value;
+      const amt = wrap.querySelector(`[data-amount="${ex.id}"]`);
+      if (amt) { const a = extraAmount(ex); amt.value = a == null ? '' : a.toLocaleString(); }
+      const tot = wrap.querySelector(`[data-extras-total="${inp.dataset.owner || ''}"]`);
+      if (tot) tot.textContent = extrasTotal(extraRows(inp.dataset.owner || null)).toLocaleString();
+      state.serverIssues = null;
+      scheduleValidate();
+    });
+    wrap.addEventListener('click', e => {
+      const t = e.target.closest('button');
+      if (!t) return;
+      if (t.dataset.exAdd !== undefined) {
+        const owner = t.dataset.exAdd || null;
+        extraRows(owner).push(newExtra());
+        renderExtras();
+        const block = wrap.querySelector(`[data-extras-owner="${owner || ''}"]`);
+        const inputs = block && block.querySelectorAll('input[data-k="name"]');
+        if (inputs && inputs.length) inputs[inputs.length - 1].focus();
+        scheduleValidate();
+      } else if (t.dataset.exDel) {
+        const rows = extraRows(t.dataset.owner || null);
+        const i = rows.findIndex(x => x.id === t.dataset.exDel);
+        if (i >= 0) rows.splice(i, 1);
+        renderExtras();
+        state.serverIssues = null;
+        scheduleValidate();
+      } else if (t.dataset.exCopySel) {
+        copyExtras(t.dataset.exCopySel, 'selected');
+      } else if (t.dataset.exCopyAll) {
+        copyExtras(t.dataset.exCopyAll, 'all');
+      }
+    });
+  }
+
+  function extrasPayload(rows) {
+    return rows.map(ex => ({ name: ex.name, qty: ex.qty, unit_price: ex.unitPrice }));
+  }
+
+  // 서버 validation._parse_extras 와 동일한 규칙
+  function validateExtraRows(rows, prefix, issues) {
+    const err = (code, path, message) => issues.push({ level: 'error', code, path, message });
+    const warn = (code, path, message) => issues.push({ level: 'warning', code, path, message });
+    rows.forEach((ex, i) => {
+      if (extraIsEmpty(ex)) return;
+      const p = `${prefix}[${i}]`;
+      if (!ex.name.trim()) err('EXTRA_NAME_REQUIRED', `${p}.name`, `추가 항목 ${i + 1}번의 항목명을 입력해 주세요.`);
+      const q = parseInt0(ex.qty);
+      const u = parseInt0(ex.unitPrice);
+      if (!q.ok) err('EXTRA_NUM_INVALID', `${p}.qty`, `추가 항목 ${i + 1}번의 수량 값은 0 이상의 정수여야 합니다.`);
+      if (!u.ok) err('EXTRA_NUM_INVALID', `${p}.unit_price`, `추가 항목 ${i + 1}번의 단가 값은 0 이상의 정수여야 합니다.`);
+      if (!q.value) warn('EXTRA_QTY_EMPTY', `${p}.qty`, `추가 항목 ${i + 1}번의 수량이 비어 있거나 0 입니다.`);
+      else if (isBlank(ex.unitPrice)) err('EXTRA_PRICE_REQUIRED', `${p}.unit_price`, `추가 항목 ${i + 1}번의 단가를 입력해 주세요.`);
     });
   }
 
@@ -580,6 +738,7 @@
     updateSpecInputs();
     renderItems();
     renderDist();
+    renderExtras();
     $('typeInput').value = typeInputLabel();
     $('receivedDate').value = state.receivedDate;
     $('dueDate').value = state.dueDate;
@@ -670,6 +829,28 @@
     } else if (!multi && state.campus.trim() && kept.length && !addressNames.has(state.campus.trim())) {
       warn('ADDRESS_NOT_FOUND', 'campus', `'${state.campus.trim()}' 은(는) 주소록에 없어 납품서의 주소·담당자가 빈칸으로 출력됩니다.`);
     }
+
+    // 납품서 추가 항목
+    if (multi) {
+      const deliverable = new Set();
+      const seenCampus = new Set();
+      state.distribution.forEach(d => {
+        const c = d.campus.trim();
+        const total = state.items.reduce((s, it) => s + (itemIsEmpty(it) ? 0 : (parseInt0(d.qtys[it.id]).value || 0)), 0);
+        if (c && !seenCampus.has(c) && total > 0 && kept.length) deliverable.add(d.id);
+        if (c) seenCampus.add(c);
+      });
+      state.distribution.forEach((d, j) => {
+        const rows = extraRows(d.id);
+        validateExtraRows(rows, `extras_by_campus[${j}].extras`, issues);
+        if (rows.some(ex => !extraIsEmpty(ex)) && !deliverable.has(d.id)) {
+          warn('EXTRA_CAMPUS_UNKNOWN', `extras_by_campus[${j}].campus`,
+               `추가 항목의 학원 '${d.campus.trim()}' 은(는) 납품서가 없어 반영되지 않습니다.`);
+        }
+      });
+    } else {
+      validateExtraRows(state.extras, 'extras', issues);
+    }
     return issues;
   }
 
@@ -755,6 +936,8 @@
       message_extra: state.messageExtra,
       items,
       distribution: multi ? state.distribution.map(d => ({ campus: d.campus, qtys: state.items.map(it => d.qtys[it.id] || '') })) : [],
+      extras: multi ? [] : extrasPayload(state.extras),
+      extras_by_campus: multi ? state.distribution.map(d => ({ campus: d.campus, extras: extrasPayload(extraRows(d.id)) })) : [],
     };
   }
 
@@ -915,6 +1098,8 @@
     state.messageExtra = '';
     state.items = [newItem()];
     state.distribution = [newDistRow(), newDistRow()];
+    state.extras = [];
+    state.distExtras = {};
     state.serverIssues = null;
     document.querySelector('input[name=orderType][value=single]').checked = true;
     renderMessages();
@@ -944,6 +1129,7 @@
     $('msgExtra').addEventListener('input', e => { state.messageExtra = e.target.value; });
     bindItemsEvents();
     bindDistEvents();
+    bindExtrasEvents();
     $('issueList').addEventListener('click', e => {
       const li = e.target.closest('[data-target]');
       if (!li) return;
@@ -969,6 +1155,7 @@
     state.meta = data.meta;
     fillDatalist('dl-types', [...typeNames(), BLANK_ORDER_LABEL, BLANK_DELIVERY_LABEL]);
     fillDatalist('dl-campuses', campusNames());
+    fillDatalist('dl-extras', state.meta.extra_presets || []);
     fillDatalist('dl-products', [...new Set(state.settings.price_rules.filter(r => r.type_id === 'delivery').map(r => r.product))]);
     for (const f of fieldIds()) fillDatalist('dl-' + f, []);
     makeCombobox($('typeInput'), 'dl-types');
