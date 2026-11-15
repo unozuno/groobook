@@ -119,7 +119,7 @@ def _reflect_invoice(order: Order, desktop: Path, due: date, dry_run: bool, out:
                 row = es.insert_item_row(est, layout)
                 layout = es.find_layout(est)
                 expected = {es.ESTIMATE_SHEET: es.expected_after_insert(row, es.row_merges(est, row))}
-            total_row = delivery_total_row(len(note.lines))
+            total_row = delivery_total_row(note.row_count)
             es.write_item_row(est, layout, row, note.lines[0].item.name, sheet, total_row, due.month, due.day)
             # 엑셀 밖(미리보기 등)에서도 0 이 아닌 값이 보이도록 모든 수식의 계산값을 함께 기록한다
             cached = cc.compute_cached(wb, orig_cache, snap, volatile=(es.ESTIMATE_SHEET,))
@@ -159,9 +159,21 @@ def _as_date(v) -> Optional[date]:
     return None
 
 
+def _marketing_rows(note: DeliveryNote) -> list[tuple[str, Optional[int], Optional[int], Optional[int]]]:
+    """마케팅팀 파일에 입력할 줄 (제품명, 부수, 페이지, 단가) — 품목 줄 뒤에 추가 항목."""
+    rows = []
+    for i, line in enumerate(note.lines):
+        price = note.unit_prices[i] if i < len(note.unit_prices) else None
+        rows.append((line.item.name, line.qty, line.item.pages or None, price))
+    for ex in note.extras:
+        rows.append((ex.name, ex.qty, None, ex.unit_price))
+    return rows
+
+
 def _marketing_plan(ws, note: DeliveryNote, due: date) -> tuple[str, str, Optional[int], Optional[int], int]:
     """(status, message, 시작 열, 시작 행, 필요한 행 수). status: ok | skip | error"""
-    need = len(note.lines)
+    rows = _marketing_rows(note)
+    need = len(rows)
     c0 = _find_block(ws, note.campus)
     if c0 is None:
         return "skip", f"마케팅팀 파일에 '{note.campus}' 구역이 없어 건너뜁니다.", None, None, need
@@ -185,9 +197,9 @@ def _marketing_plan(ws, note: DeliveryNote, due: date) -> tuple[str, str, Option
         row_date = _as_date(ws.cell(r, c0).value)
         row_name = dp.norm_name(str(ws.cell(r, c0 + 1).value or ""))
         row_qty = ws.cell(r, c0 + 2).value
-        for line in note.lines:
-            if row_date == due and row_name == dp.norm_name(line.item.name) and row_qty == line.qty:
-                return "skip", f"같은 일자·제품명·부수('{line.item.name}')가 이미 입력되어 있어 건너뜁니다.", None, None, need
+        for name, qty, _pages, _price in rows:
+            if row_date == due and row_name == dp.norm_name(name) and row_qty == qty:
+                return "skip", f"같은 일자·제품명·부수('{name}')가 이미 입력되어 있어 건너뜁니다.", None, None, need
     start = (max(used) + 1) if used else MARKETING_DATA_FIRST_ROW
     if start + need - 1 > last_data:
         free = max(0, last_data - start + 1)
@@ -198,11 +210,9 @@ def _marketing_plan(ws, note: DeliveryNote, due: date) -> tuple[str, str, Option
 def _write_marketing_rows(ws, note: DeliveryNote, due: date, c0: int, start: int) -> set[str]:
     written: set[str] = set()
     when = datetime(due.year, due.month, due.day)
-    for i, line in enumerate(note.lines):
+    for i, (name, qty, pages, price) in enumerate(_marketing_rows(note)):
         r = start + i
-        price = note.unit_prices[i] if i < len(note.unit_prices) else None
-        pages = line.item.pages or None
-        values = [when, line.item.name, line.qty, pages, price]
+        values = [when, name, qty, pages, price]
         for k, v in enumerate(values):
             cell = ws.cell(r, c0 + k)
             cell.value = v
@@ -212,7 +222,7 @@ def _write_marketing_rows(ws, note: DeliveryNote, due: date, c0: int, start: int
             date_cell.number_format = 'mm"월"\\ dd"일"'
         amount = ws.cell(r, c0 + 5)
         qty_col, price_col = L(c0 + 2), L(c0 + 4)
-        amount.value = f"={qty_col}{r}*{price_col}{r}" if (price is not None and line.qty) else None
+        amount.value = f"={qty_col}{r}*{price_col}{r}" if (price is not None and qty) else None
         written.add(amount.coordinate)
     return written
 

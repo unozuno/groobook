@@ -35,6 +35,9 @@ FIELD_GROUPS: dict[str, list[str]] = {
 SIZE_FOLLOW_FIELDS: tuple[str, ...] = ("insert_size", "cover_size")
 SIZE_SOURCE_FIELD = "inner_size"
 
+# 납품서 '추가 항목' 제안 목록 (택배비 등) — 이 밖의 항목은 직접 입력
+EXTRA_PRESETS: tuple[str, ...] = ("택배비", "퀵배송비", "디자인비", "표지디자인비", "내지디자인비")
+
 # 품목 표 기본값 키
 ITEM_DEFAULT_KEYS: tuple[str, ...] = ("qty", "mono", "insert", "color")
 ITEM_DEFAULT_LABELS: dict[str, str] = {

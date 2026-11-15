@@ -90,7 +90,7 @@ def delivery_row_count(n_lines: int) -> int:
 
 
 def delivery_total_row(n_lines: int) -> int:
-    """납품서 시트에서 합계 행의 번호 (수량 C열, 공급액 F열)."""
+    """납품서 시트에서 합계 행의 번호 (수량 C열, 공급액 F열). n_lines = 품목 + 추가 항목 줄 수."""
     return DELIV_FIRST_ITEM_ROW + delivery_row_count(n_lines)
 
 
@@ -260,7 +260,7 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
     ws["E8"].value = "단가"
     ws["F8"].value = "공급액"
 
-    n = delivery_row_count(len(note.lines))
+    n = delivery_row_count(note.row_count)
     first = DELIV_FIRST_ITEM_ROW
     last = first + n - 1
     for idx in range(n):
@@ -272,6 +272,16 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
         _set(ws, r, DCOL_QTY, line.qty if line else None, border=BOX, fmt=NUM_FMT)
         _set(ws, r, DCOL_PAGES, line.item.pages if line else None, border=BOX, fmt=NUM_FMT)
         _set(ws, r, DCOL_PRICE, price, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_AMOUNT, f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")', border=BOX, fmt=NUM_FMT)
+
+    for k, ex in enumerate(note.extras):
+        idx = len(note.lines) + k
+        r = first + idx
+        _set(ws, r, DCOL_NO, idx + 1, border=BOX)
+        _set(ws, r, DCOL_NAME, ex.name, border=BOX)
+        _set(ws, r, DCOL_QTY, ex.qty, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_PAGES, None, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_PRICE, ex.unit_price, border=BOX, fmt=NUM_FMT)
         _set(ws, r, DCOL_AMOUNT, f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")', border=BOX, fmt=NUM_FMT)
 
     t = last + 1

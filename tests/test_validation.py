@@ -295,3 +295,53 @@ def test_blank_delivery_blue_cell_product_requires_price(settings):
     req.items[0].unit_price = "250"
     res, order = validate(req, settings)
     assert res.ok and order.deliveries[0].unit_prices == [250]
+
+
+# ───────── 납품서 추가 항목 ─────────
+
+def _codes(res):
+    return {i.code for i in res.errors} | {i.code for i in res.warnings}
+
+
+def test_extras_attached_to_single_delivery(settings):
+    req = base_request(extras=[
+        {"name": "택배비", "qty": "1", "unit_price": "3000"},
+        {"name": "", "qty": "", "unit_price": ""},                      # 빈 줄 무시
+        {"name": "디자인비", "qty": "2", "unit_price": "50000"},
+    ])
+    res, order = validate(req, settings)
+    assert res.ok
+    ex = order.deliveries[0].extras
+    assert [(e.name, e.qty, e.unit_price) for e in ex] == [("택배비", 1, 3000), ("디자인비", 2, 50000)]
+    assert order.deliveries[0].row_count == 4
+
+
+def test_extras_errors(settings):
+    req = base_request(extras=[
+        {"name": "", "qty": "1", "unit_price": "100"},        # 항목명 없음
+        {"name": "택배비", "qty": "x", "unit_price": "100"},   # 숫자 오류
+        {"name": "퀵배송비", "qty": "1", "unit_price": ""},    # 단가 없음
+    ])
+    res, order = validate(req, settings)
+    assert order is None
+    assert {"EXTRA_NAME_REQUIRED", "EXTRA_NUM_INVALID", "EXTRA_PRICE_REQUIRED"} <= {e.code for e in res.errors}
+    assert any(e.path == "extras[2].unit_price" for e in res.errors)
+
+
+def test_extras_qty_empty_is_warning(settings):
+    res, order = validate(base_request(extras=[{"name": "택배비", "qty": "", "unit_price": "3000"}]), settings)
+    assert res.ok and "EXTRA_QTY_EMPTY" in _codes(res)
+
+
+def test_multi_extras_by_campus(settings):
+    req = base_request(order_type="multi", multi_name="묶음", items=[
+        {"name": "A", "color": "2", "unit_price": "1000"}],
+        distribution=[{"campus": "평촌캠퍼스", "qtys": ["100"]}, {"campus": "분당캠퍼스", "qtys": ["50"]}],
+        extras_by_campus=[
+            {"campus": "분당캠퍼스", "extras": [{"name": "택배비", "qty": "1", "unit_price": "4000"}]},
+            {"campus": "없는학원", "extras": [{"name": "택배비", "qty": "1", "unit_price": "4000"}]},
+        ])
+    res, order = validate(req, settings)
+    assert res.ok and "EXTRA_CAMPUS_UNKNOWN" in _codes(res)
+    by = {n.campus: n for n in order.deliveries}
+    assert by["평촌캠퍼스"].extras == [] and [e.name for e in by["분당캠퍼스"].extras] == ["택배비"]

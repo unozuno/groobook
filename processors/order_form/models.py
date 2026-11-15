@@ -35,6 +35,22 @@ class DistributionRowIn(BaseModel):
     qtys: list[Num] = Field(default_factory=list)
 
 
+class ExtraIn(BaseModel):
+    """납품서에만 붙는 추가 항목 (택배비·디자인비 등). 공급액 = 수량 × 단가."""
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = ""
+    qty: Num = None
+    unit_price: Num = None
+
+
+class CampusExtrasIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    campus: str = ""
+    extras: list[ExtraIn] = Field(default_factory=list)
+
+
 class OrderRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -52,6 +68,8 @@ class OrderRequest(BaseModel):
     message_extra: str = ""
     items: list[ItemIn] = Field(default_factory=list)
     distribution: list[DistributionRowIn] = Field(default_factory=list)
+    extras: list[ExtraIn] = Field(default_factory=list)                    # 단일 발주 / 납품서 모드
+    extras_by_campus: list[CampusExtrasIn] = Field(default_factory=list)   # 다중 발주 (분배표 학원별)
 
 
 class GenerateRequest(BaseModel):
@@ -97,6 +115,13 @@ class DistributionRow:
 
 
 @dataclass
+class Extra:
+    name: str
+    qty: Optional[int]
+    unit_price: Optional[int]
+
+
+@dataclass
 class DeliveryLine:
     item: Item
     qty: Optional[int]
@@ -110,6 +135,12 @@ class DeliveryNote:
     address: Optional[str]      # 주소록 미조회 시 None
     contact: Optional[str]
     unit_prices: list[Optional[int]] = field(default_factory=list)
+    extras: list[Extra] = field(default_factory=list)   # 품목 줄 뒤에 붙는 추가 항목
+
+    @property
+    def row_count(self) -> int:
+        """납품서 표에 들어가는 줄 수 (품목 + 추가 항목)."""
+        return len(self.lines) + len(self.extras)
 
 
 @dataclass

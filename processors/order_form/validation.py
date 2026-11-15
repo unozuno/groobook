@@ -12,7 +12,7 @@ from processors.order_form import naming
 from processors.order_form.compute import distribution_totals, page_total
 from processors.order_form.fields import FIELD_IDS
 from processors.order_form.models import (
-    DeliveryLine, DeliveryNote, DistributionRow, Item, Order, OrderRequest,
+    DeliveryLine, DeliveryNote, DistributionRow, Extra, Item, Order, OrderRequest,
 )
 from processors.order_form.pricing import fill_unit_prices, quote
 
@@ -87,6 +87,33 @@ def parse_date(value: str) -> tuple[bool, Optional[date]]:
 
 def _blank(v) -> bool:
     return v is None or str(v).strip() == ""
+
+
+def _parse_extras(raw: list, path: str, res: "ValidationResult") -> list[Extra]:
+    """납품서 추가 항목. 완전히 빈 줄은 무시하고, 값이 있으면 항목명을 요구한다.
+    추가 항목에는 자동 단가가 없으므로 수량이 있으면 단가도 필수."""
+    out: list[Extra] = []
+    for i, ex in enumerate(raw):
+        if all(_blank(getattr(ex, k)) for k in ("name", "qty", "unit_price")):
+            continue
+        p = f"{path}[{i}]"
+        name = (ex.name or "").strip()
+        if not name:
+            res.error("EXTRA_NAME_REQUIRED", f"{p}.name", f"추가 항목 {i + 1}번의 항목명을 입력해 주세요.")
+        vals = {}
+        for key, label in (("qty", "수량"), ("unit_price", "단가")):
+            ok, val = parse_int(getattr(ex, key))
+            if not ok:
+                res.error("EXTRA_NUM_INVALID", f"{p}.{key}",
+                          f"추가 항목 {i + 1}번의 {label}은(는) 0 이상의 정수여야 합니다.")
+                val = None
+            vals[key] = val
+        if not vals["qty"]:
+            res.warn("EXTRA_QTY_EMPTY", f"{p}.qty", f"추가 항목 {i + 1}번의 수량이 비어 있거나 0 입니다.")
+        elif vals["unit_price"] is None and not _blank(ex.qty):
+            res.error("EXTRA_PRICE_REQUIRED", f"{p}.unit_price", f"추가 항목 {i + 1}번의 단가를 입력해 주세요.")
+        out.append(Extra(name=name, qty=vals["qty"], unit_price=vals["unit_price"]))
+    return out
 
 
 # ───────────────────────── 메인 ─────────────────────────
@@ -270,6 +297,22 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         sheet, _ = naming.delivery_sheet_name(campus, taken, multi=False)
         addr, contact = lookup(campus, "campus")
         deliveries.append(DeliveryNote(campus, sheet, lines, addr, contact))
+
+    # 추가 항목 — 납품서에만 붙는다 (발주서 시트에는 들어가지 않음)
+    if multi:
+        by_campus = {n.campus: n for n in deliveries}
+        for j, ce in enumerate(req.extras_by_campus):
+            extras = _parse_extras(ce.extras, f"extras_by_campus[{j}].extras", res)
+            c = ce.campus.strip()
+            if not extras:
+                continue
+            if c in by_campus:
+                by_campus[c].extras.extend(extras)
+            else:
+                res.warn("EXTRA_CAMPUS_UNKNOWN", f"extras_by_campus[{j}].campus",
+                         f"추가 항목의 학원 '{c}' 은(는) 납품서가 없어 반영되지 않습니다.")
+    elif deliveries:
+        deliveries[0].extras = _parse_extras(req.extras, "extras", res)
 
     if not res.ok:
         return res, None

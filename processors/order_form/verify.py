@@ -51,7 +51,7 @@ def verify_workbook(xlsx_bytes: bytes, order: Order) -> None:
 
     for note in order.deliveries:
         ws = wb[note.sheet_name]
-        n = xb.delivery_row_count(len(note.lines))
+        n = xb.delivery_row_count(note.row_count)
         first = xb.DELIV_FIRST_ITEM_ROW
         last = first + n - 1
         for idx, line in enumerate(note.lines):
@@ -66,8 +66,23 @@ def verify_workbook(xlsx_bytes: bytes, order: Order) -> None:
             expected = f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")'
             if amount != expected:
                 problems.append(f"{ws.title}!F{r} 공급액 수식: 기대 {expected}, 실제 {amount}")
+        for k, ex in enumerate(note.extras):
+            r = first + len(note.lines) + k
+            name = ws.cell(row=r, column=xb.DCOL_NAME).value
+            if name != ex.name:
+                problems.append(f"{ws.title}!B{r} 추가 항목명: 기대 {ex.name}, 실제 {name}")
+            qty = ws.cell(row=r, column=xb.DCOL_QTY).value
+            if (qty or 0) != (ex.qty or 0):
+                problems.append(f"{ws.title}!C{r} 추가 항목 수량: 기대 {ex.qty}, 실제 {qty}")
+            price = ws.cell(row=r, column=xb.DCOL_PRICE).value
+            if price != ex.unit_price:
+                problems.append(f"{ws.title}!E{r} 추가 항목 단가: 기대 {ex.unit_price}, 실제 {price}")
+            expected = f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")'
+            if ws.cell(row=r, column=xb.DCOL_AMOUNT).value != expected:
+                problems.append(f"{ws.title}!F{r} 추가 항목 공급액 수식 불일치")
         t = last + 1
-        _expect(ws, t, xb.DCOL_QTY, sum((l.qty or 0) for l in note.lines), "수량 합계", problems)
+        total_qty = sum((l.qty or 0) for l in note.lines) + sum((e.qty or 0) for e in note.extras)
+        _expect(ws, t, xb.DCOL_QTY, total_qty, "수량 합계", problems)
         f_total = ws.cell(row=t, column=xb.DCOL_AMOUNT).value
         if f_total != f"=SUM(F{first}:F{last})":
             problems.append(f"{ws.title}!F{t} 공급액 합계 수식 불일치: {f_total}")

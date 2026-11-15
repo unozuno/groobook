@@ -192,3 +192,27 @@ def test_delivery_sheet_format(sample_order):
     assert _sides(ws["B10"]) == ("thin", "thin", "thin", "thin")
     # 서명 라벨 좌정렬
     assert ws["E17"].alignment.horizontal == "left"
+
+
+def test_delivery_extras_follow_items_and_count_for_rows(make_order):
+    items = [{"name": f"품목{i}", "qty": "10", "unit_price": "100"} for i in range(5)]
+    order = make_order(items=items, extras=[{"name": "택배비", "qty": "1", "unit_price": "3000"}])
+    data, wb = _wb(order)
+    ws = wb["납품서"]
+    # 품목 5 + 추가 1 = 6줄 → 10행 (9~18), 합계 19행
+    assert (ws["A14"].value, ws["B14"].value, ws["C14"].value, ws["D14"].value, ws["E14"].value) == (6, "택배비", 1, None, 3000)
+    assert ws["F14"].value == '=IF(AND(C14>0,E14<>""),C14*E14,"")'
+    assert ws["A19"].value == "합계" and ws["C19"].value == "=SUM(C9:C18)"
+    # 발주서 시트에는 추가 항목이 없다
+    assert all(wb["발주서"].cell(r, 3).value != "택배비" for r in range(1, 30))
+    verify_workbook(data, order)
+
+
+def test_delivery_extras_only_in_their_campus_sheet(make_order):
+    order = make_order(order_type="multi", multi_name="묶음", items=[{"name": "A", "color": "2", "unit_price": "100"}],
+                       distribution=[{"campus": "평촌캠퍼스", "qtys": ["10"]}, {"campus": "분당캠퍼스", "qtys": ["5"]}],
+                       extras_by_campus=[{"campus": "분당캠퍼스", "extras": [{"name": "디자인비", "qty": "1", "unit_price": "50000"}]}])
+    data, wb = _wb(order)
+    assert wb["납품서_평촌캠퍼스"]["B10"].value is None
+    assert wb["납품서_분당캠퍼스"]["B10"].value == "디자인비"
+    verify_workbook(data, order)

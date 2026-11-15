@@ -20,7 +20,7 @@ from processors.email_sender import scan_files, send_billing_emails
 from processors.order_form import settings_store
 from processors.order_form.clock import today_seoul
 from processors.order_form.fields import (
-    FIELD_GROUPS, GROUP_ORDER, ITEM_DEFAULT_KEYS, ITEM_DEFAULT_LABELS, field_meta,
+    EXTRA_PRESETS, FIELD_GROUPS, GROUP_ORDER, ITEM_DEFAULT_KEYS, ITEM_DEFAULT_LABELS, field_meta,
 )
 from processors.order_form.desktop_paths import resolve_desktop
 from processors.order_form.models import GenerateRequest, QuoteRequest, ReflectRequest
@@ -318,6 +318,7 @@ def _settings_meta() -> dict:
         "fields": field_meta(),
         "groups": [{"name": g, "fields": FIELD_GROUPS[g]} for g in GROUP_ORDER],
         "item_default_keys": list(ITEM_DEFAULT_KEYS),
+        "extra_presets": list(EXTRA_PRESETS),
         "item_default_labels": ITEM_DEFAULT_LABELS,
         "today": today_seoul().isoformat(),
     }

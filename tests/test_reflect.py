@@ -374,3 +374,24 @@ def test_real_reference_files_roundtrip(make_order, tmp_path):
     assert mk["AF7"].value == "교재 상품권 난수" and mk["AG7"].value == 1000       # 분당캠퍼스 구역(AE~AJ)
     assert mk["AG48"].value == "=SUM(AG4:AG47)"
     assert [i.status for i in run(order_for(make_order), desk)] == ["skip", "skip"]
+
+
+# ───────── 추가 항목 ─────────
+
+EXTRAS = [{"name": "택배비", "qty": "1", "unit_price": "3000"}]
+
+
+def test_marketing_rows_include_extras(make_order, desk):
+    items = run(order_for(make_order, extras=EXTRAS), desk, targets=("marketing",))
+    assert [(i.status, i.detail) for i in items] == [("done", "4~6행")]
+    ws = load_workbook(marketing_path(desk))["소모품출고내역"]
+    c0 = 1 + 2 * 6
+    assert [ws.cell(6, c0 + k).value for k in range(6)] == [datetime(2026, 11, 27), "택배비", 1, None, 3000, "=O6*Q6"]
+
+
+def test_invoice_total_row_counts_extras(make_order, desk):
+    many = [{"name": f"제품{i}", "qty": "1", "unit_price": "1"} for i in range(5)]
+    run(order_for(make_order, items=many, extras=EXTRAS), desk, targets=("invoice",))
+    ws = load_workbook(invoice_path(desk))["1127제품0"]
+    assert ws["B14"].value == "택배비" and ws["C19"].value == "=SUM(C9:C18)"    # 5+1 → 10행
+    assert est(desk)["G14"].value == "='1127제품0'!C19"
