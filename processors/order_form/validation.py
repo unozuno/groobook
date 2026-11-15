@@ -150,7 +150,7 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
 
     # 작업번호
     if not req.job_no.strip():
-        res.error("JOB_NO_REQUIRED", "job_no", "작업번호를 입력해 주세요.")
+        res.warn("JOB_NO_MISSING", "job_no", "작업번호가 비어 있어 발주서·납품서의 작업번호 칸이 빈칸으로 출력됩니다.")
 
     # 납품학원
     campus = req.campus.strip()

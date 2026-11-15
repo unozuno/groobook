@@ -765,7 +765,7 @@
     } else if (!state.campus.trim()) {
       err('CAMPUS_REQUIRED', 'campus', '납품학원을 입력해 주세요.');
     }
-    if (!state.jobNo.trim()) err('JOB_NO_REQUIRED', 'job_no', '작업번호를 입력해 주세요.');
+    if (!state.jobNo.trim()) warn('JOB_NO_MISSING', 'job_no', '작업번호가 비어 있어 발주서·납품서의 작업번호 칸이 빈칸으로 출력됩니다.');
     if (!state.dueDate) {
       warn('DUE_DATE_MISSING', 'due_date', `${bd ? '납품일' : '납기일자'}이 비어 있어 납품서의 납품일이 빈칸으로 출력됩니다.`);
     }
