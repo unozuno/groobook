@@ -3,7 +3,7 @@
 레이아웃은 기준 파일 `발주서(sample)` / `납품서((sample)` 시트를 따르되,
 - 표지 행에 사이즈·코팅·동판 칸을 추가하고
 - 포장 아래(9행)에 생산처 전달사항을 붉은 글씨로 넣으며
-- 품목 행 수는 10행 이상 가변, 합계 수식 범위도 함께 늘어난다.
+- 발주서 품목 행 수는 품목 수만큼, 납품서는 5행(≤5건)·10행(6~10건)·그 이상은 품목 수만큼이며 합계 수식 범위도 함께 늘어난다.
 외부 파일 참조는 전혀 쓰지 않는다.
 """
 from io import BytesIO
@@ -18,8 +18,10 @@ from processors.order_form.models import DeliveryNote, Order
 # ───────── 스타일 상수 ─────────
 GREEN = PatternFill("solid", fgColor="92D050")
 _THIN = Side(style="thin")
+_MEDIUM = Side(style="medium")
 BOX = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 BOTTOM = Border(bottom=_THIN)
+SIDES = Border(left=_THIN, right=_THIN)
 NUM_FMT = '_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-'
 DATE_FMT = '[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy'
 CENTER = Alignment(horizontal="center", vertical="center")
@@ -30,11 +32,12 @@ MEMO_ALIGN = Alignment(horizontal="left", vertical="center", wrap_text=True)
 F12 = Font(size=12, bold=True)
 F14_RED = Font(size=14, bold=True, color="FF0000")
 F20 = Font(size=20, bold=True)
+F20_RED = Font(size=20, bold=True, color="FF0000")
 F24 = Font(size=24, bold=True)
 F8 = Font(size=8, bold=True)
 
 ROW_H = 30
-MIN_ITEM_ROWS = 10
+DELIV_ROW_STEPS = (5, 10)  # 납품서 최소 행 수 단계
 
 # 발주서 품목 표 열 (1-based)
 ORDER_FIRST_ITEM_ROW = 11
@@ -74,35 +77,63 @@ def _job_no_value(job_no: str):
 
 
 def item_row_count(n_items: int) -> int:
-    return max(MIN_ITEM_ROWS, n_items)
+    """발주서 품목 행 수 — 품목 수만큼(최소 1행)."""
+    return max(1, n_items)
+
+
+def delivery_row_count(n_lines: int) -> int:
+    """납품서 품목 행 수 — 5건 이하 5행, 6~10건 10행, 그 이상은 품목 수만큼."""
+    for step in DELIV_ROW_STEPS:
+        if n_lines <= step:
+            return step
+    return n_lines
 
 
 def delivery_total_row(n_lines: int) -> int:
     """납품서 시트에서 합계 행의 번호 (수량 C열, 공급액 F열)."""
-    return DELIV_FIRST_ITEM_ROW + item_row_count(n_lines)
+    return DELIV_FIRST_ITEM_ROW + delivery_row_count(n_lines)
+
+
+def _px_to_width(px: int) -> float:
+    """엑셀 열 너비(문자 수)로 환산 — 기본 글꼴 기준 px = 너비*7 + 5."""
+    return round((px - 5) / 7, 2)
+
+
+def _outline_medium(ws, r1: int, c1: int, r2: int, c2: int) -> None:
+    """영역의 바깥 테두리만 굵게(medium) — 안쪽 선과 셀 서식은 그대로 둔다."""
+    for r in range(r1, r2 + 1):
+        for c in range(c1, c2 + 1):
+            cell = ws.cell(row=r, column=c)
+            b = cell.border
+            cell.border = Border(
+                left=_MEDIUM if c == c1 else b.left,
+                right=_MEDIUM if c == c2 else b.right,
+                top=_MEDIUM if r == r1 else b.top,
+                bottom=_MEDIUM if r == r2 else b.bottom,
+            )
 
 
 # ───────── 발주서 ─────────
 
 def write_order_sheet(ws, order: Order) -> None:
-    widths = {"A": 10.8, "B": 15, "C": 37, "D": 12, "E": 12, "F": 12, "G": 12,
-              "K": 9, "L": 9, "M": 9, "N": 9}
+    w130 = _px_to_width(130)
+    widths = {"A": w130, "B": w130, "C": _px_to_width(400), "D": w130, "E": w130, "F": w130,
+              "G": w130, "H": w130, "I": w130, "J": w130, "K": 9, "L": 9, "M": 9, "N": 9}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
     # 1행 제목
     _set(ws, 1, 3, "그루북", font=F20, align=RIGHT)
     ws.merge_cells("D1:E1")
-    _set(ws, 1, 4, order.type_name or None, font=F20)
+    _set(ws, 1, 4, order.type_name or None, font=F20_RED)
     _set(ws, 1, 6, "제작 요청서", font=F20, align=LEFT)
 
     # 2~8행 기본 정보 + 사양
     for i, r in enumerate(range(2, 9), start=1):
         _set(ws, r, 1, i)
     _set(ws, 2, 2, "접수일자")
-    _set(ws, 2, 3, order.received_date, align=LEFT, fmt=DATE_FMT)
-    ws.merge_cells("F2:G2")
-    _set(ws, 2, 6, "납기일자")
+    _set(ws, 2, 3, order.received_date, fmt=DATE_FMT)
+    _set(ws, 2, 5, "납기일자")
     ws.merge_cells("H2:J2")
     _set(ws, 2, 8, order.due_date, fmt=DATE_FMT)
 
@@ -186,6 +217,8 @@ def write_order_sheet(ws, order: Order) -> None:
         _set(ws, t, col, f"=SUM({letter}{first}:{letter}{last})", font=F8, fmt=NUM_FMT)
     _set(ws, t, COL_N, f"=SUM(K{t}:M{t})", font=F8, fmt=NUM_FMT)
 
+    _outline_medium(ws, 10, COL_NO, t, COL_BUNDLE)
+
     for r in range(1, t + 1):
         ws.row_dimensions[r].height = ROW_H
     if memo_lines > 1:
@@ -214,7 +247,7 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
     _set(ws, 5, 1, "수령자", border=BOX)
     _set(ws, 5, 2, None, border=BOX)
     _set(ws, 5, 3, note.campus, border=BOX)
-    _set(ws, 5, 4, None, border=BOX)
+    _set(ws, 5, 4, None, border=SIDES)
     _set(ws, 5, 5, "공급자", border=BOX)
     _set(ws, 5, 6, "그루북", border=BOX)
 
@@ -233,7 +266,7 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
     ws["E8"].value = "단가"
     ws["F8"].value = "공급액"
 
-    n = item_row_count(len(note.lines))
+    n = delivery_row_count(len(note.lines))
     first = DELIV_FIRST_ITEM_ROW
     last = first + n - 1
     for idx in range(n):
@@ -255,10 +288,12 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
     _set(ws, t, DCOL_PRICE, None, border=BOX)
     _set(ws, t, DCOL_AMOUNT, f"=SUM(F{first}:F{last})", border=BOX, fmt=NUM_FMT)
 
+    _outline_medium(ws, 7, DCOL_NO, t, DCOL_AMOUNT)
+
     addr_row = t + 2
     _set(ws, addr_row, 1, f"인수처 주소 : {note.address or ''}".rstrip(), align=LEFT)
     _set(ws, addr_row + 1, 1, f"인수 담당자 : {note.contact or ''}".rstrip(), align=LEFT)
-    _set(ws, addr_row + 1, 5, "서명", border=BOTTOM)
+    _set(ws, addr_row + 1, 5, "서명", align=LEFT, border=BOTTOM)
     _set(ws, addr_row + 1, 6, "      (인)", align=RIGHT, border=BOTTOM)
 
     for r in range(1, addr_row + 2):

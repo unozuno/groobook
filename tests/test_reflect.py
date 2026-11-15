@@ -59,7 +59,7 @@ def test_invoice_sheet_appended_at_end(make_order, desk):
     assert ws["C3"].value == datetime(2026, 11, 27)
     assert (ws["C5"].value, ws["B9"].value, ws["C9"].value, ws["E9"].value) == ("분당캠퍼스", "교재 상품권 난수", 1000, 250)
     assert ws["E10"].value == 660                          # 입력 없는 품목은 단가표 자동 단가
-    assert "분당" in ws["A21"].value                      # 주소록 값이 들어감
+    assert "분당" in ws["A16"].value                      # 주소록 값이 들어감
     # 기존 시트·이미지 불변
     assert len(wb["견적서"]._images) == 1
     assert wb["견적서"]["G13"].value == "='1008내신블랭크'!C17"
@@ -137,7 +137,7 @@ def test_estimate_gets_one_line_for_new_sheet(make_order, desk):
     assert items[0].status == "done" and "견적서 14행에 한 줄을 추가" in items[0].message
     ws = est(desk)
     assert [ws[f"{c}14"].value for c in "BDFGIKN"] == [
-        "소모품", "교재 상품권 난수", None, "='1127교재상품권난수'!C19", None, "='1127교재상품권난수'!F19", "11/27"]
+        "소모품", "교재 상품권 난수", None, "='1127교재상품권난수'!C14", None, "='1127교재상품권난수'!F14", "11/27"]
     assert ws["B13"].value == "소모품" and ws["D13"].value == "기존 제품 1"     # 기존 줄 그대로
     assert ws["I28"].value == "=SUM(K13:M22)" and ws["J10"].value == "=SUM(G13:H22)"   # 삽입 없음 → 수식 불변
 
@@ -145,7 +145,7 @@ def test_estimate_gets_one_line_for_new_sheet(make_order, desk):
 def test_estimate_formula_targets_delivery_total_row(make_order, desk):
     run(order_for(make_order), desk, targets=("invoice",))
     wb = load_workbook(invoice_path(desk))
-    assert wb["1127교재상품권난수"]["C19"].value == "=SUM(C9:C18)" and wb["1127교재상품권난수"]["F19"].value == "=SUM(F9:F18)"
+    assert wb["1127교재상품권난수"]["C14"].value == "=SUM(C9:C13)" and wb["1127교재상품권난수"]["F14"].value == "=SUM(F9:F13)"
     many = [{"name": f"제품{i}", "qty": "1", "unit_price": "1"} for i in range(12)]
     run(order_for(make_order, items=many, due_date="2026-11-28"), desk, targets=("invoice",))
     ws = est(desk)
@@ -172,7 +172,7 @@ def test_estimate_line_inserted_when_full(make_order, tmp_path):
     items = run(order_for(make_order), desk, targets=("invoice",))
     assert items[0].status == "done" and "줄을 삽입해 한 줄을 추가" in items[0].message, items[0].message
     ws = est(desk)
-    assert ws["D23"].value == "교재 상품권 난수" and ws["G23"].value == "='1127교재상품권난수'!C19"
+    assert ws["D23"].value == "교재 상품권 난수" and ws["G23"].value == "='1127교재상품권난수'!C14"
     assert ws["D25"].value == "표  지" and ws["D29"].value == "공 급 가"                    # 아래가 한 줄씩 내려감
     assert ws["I29"].value == "=SUM(K13:M23)" and ws["J10"].value == "=SUM(G13:H23)"
     assert ws["K31"].value == "=SUM(K29:M30)" and ws["M10"].value == "=K31"
@@ -234,10 +234,10 @@ def test_invoice_writes_cached_values_next_to_formulas(make_order, desk):
     run(order_for(make_order), desk, targets=("invoice",))
     sheet = values(desk, "1127교재상품권난수")
     assert [sheet["F9"].value, sheet["F10"].value] == [250000, 330000]          # 둘째 줄은 단가표 자동 단가 660
-    assert (sheet["C19"].value, sheet["F19"].value) == (1500, 580000)
+    assert (sheet["C14"].value, sheet["F14"].value) == (1500, 580000)
     est = values(desk, "견적서")
     assert (est["G14"].value, est["K14"].value) == (1500, 580000)
-    assert load_workbook(invoice_path(desk))["견적서"]["G14"].value == "='1127교재상품권난수'!C19"   # 수식은 그대로
+    assert load_workbook(invoice_path(desk))["견적서"]["G14"].value == "='1127교재상품권난수'!C14"   # 수식은 그대로
 
 
 def test_blank_delivery_values_reach_estimate(make_order, desk):
@@ -369,7 +369,7 @@ def test_real_reference_files_roundtrip(make_order, tmp_path):
     assert len(inv.sheetnames) == n_sheets + 1 and inv.sheetnames[-1] == "1127교재상품권난수"
     assert len(inv["견적서"]._images) == 1 and len(inv._external_links) == n_links
     assert inv["견적서"]["D21"].value == "교재 상품권 난수" and inv["견적서"]["N21"].value == "11/27"   # 참조1 의 첫 빈 줄
-    assert inv["견적서"]["G21"].value == "='1127교재상품권난수'!C19" and inv["견적서"]["I28"].value == "=SUM(K13:M22)"
+    assert inv["견적서"]["G21"].value == "='1127교재상품권난수'!C14" and inv["견적서"]["I28"].value == "=SUM(K13:M22)"
     mk = load_workbook(marketing_path(desk))["소모품출고내역"]
     assert mk["AF7"].value == "교재 상품권 난수" and mk["AG7"].value == 1000       # 분당캠퍼스 구역(AE~AJ)
     assert mk["AG48"].value == "=SUM(AG4:AG47)"

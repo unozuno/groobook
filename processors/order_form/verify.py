@@ -51,7 +51,7 @@ def verify_workbook(xlsx_bytes: bytes, order: Order) -> None:
 
     for note in order.deliveries:
         ws = wb[note.sheet_name]
-        n = xb.item_row_count(len(note.lines))
+        n = xb.delivery_row_count(len(note.lines))
         first = xb.DELIV_FIRST_ITEM_ROW
         last = first + n - 1
         for idx, line in enumerate(note.lines):
