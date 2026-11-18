@@ -9,7 +9,7 @@ import copy
 from processors.order_form.fields import FIELD_IDS, ITEM_DEFAULT_KEYS
 from processors.order_form.seed_prices import SEED_PRICE_RULES
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 DEFAULT_MULTI_LABEL = "다중"
 
@@ -171,6 +171,13 @@ SEED_TYPES = [
     _CERTIFICATE, _copy_type(_CERTIFICATE, "diploma", "졸업장"),
     _INVITATION, _copy_type(_INVITATION, "postcard", "엽서"),
 ]
+
+# 예약 종류: 빈 발주서(기본값 편집 가능)·납품서(내용 없음, 드롭다운 순서용)
+SEED_BLANK_TYPES = [
+    _type("blank_order", "빈 발주서", {}) | {"kind": "blank_order"},
+    _type("blank_delivery", "납품서", {}) | {"kind": "blank_delivery"},
+]
+SEED_TYPES = SEED_TYPES + SEED_BLANK_TYPES
 
 # 조건부 규칙: 값은 설정에서 읽히므로 관리자가 JSON 을 수정하면 바뀐다 (1단계는 편집 UI 없음)
 SEED_RULES = [

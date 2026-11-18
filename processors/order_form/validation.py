@@ -153,8 +153,8 @@ def validate(req: OrderRequest, settings: dict) -> tuple[ValidationResult, Optio
         res.warn("DUE_DATE_MISSING", "due_date", f"{label}이 비어 있어 납품서의 납품일이 빈칸으로 출력됩니다.")
 
     # 작업번호
-    if not req.job_no.strip():
-        res.warn("JOB_NO_MISSING", "job_no", "작업번호가 비어 있어 발주서·납품서의 작업번호 칸이 빈칸으로 출력됩니다.")
+    if mode != "blank_delivery" and not req.job_no.strip():   # 납품서 시트에는 작업번호 칸이 없다
+        res.warn("JOB_NO_MISSING", "job_no", "작업번호가 비어 있어 발주서의 작업번호 칸이 빈칸으로 출력됩니다.")
 
     # 납품학원
     campus = req.campus.strip()

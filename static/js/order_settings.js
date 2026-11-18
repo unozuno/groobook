@@ -67,7 +67,7 @@
     for (const f of state.meta.fields) fields[f.id] = { options: [], default: null };
     const item_defaults = {};
     for (const k of state.meta.item_default_keys) item_defaults[k] = null;
-    return { id: uid('t'), name, fields, item_defaults };
+    return { id: uid('t'), name, fields, item_defaults, kind: 'normal' };
   }
 
   function uniqueTypeName(base) {
@@ -87,12 +87,17 @@
       return;
     }
     const idx = state.settings.types.indexOf(t);
+    const reserved = t.kind && t.kind !== 'normal';   // 빈 발주서·납품서: 이름 변경·복제·삭제 불가
+    if (t.kind === 'blank_delivery') {
+      box.innerHTML = '';   // 납품서는 설정 내용이 없다 (드롭다운 순서만 왼쪽 목록의 ▲▼로 조정)
+      return;
+    }
     let html = `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
         <p class="section-title" style="margin:0;flex:1;">${esc(t.name)}</p>
-        <button type="button" class="btn-small" data-tact="rename">이름 변경</button>
+        ${reserved ? '' : `<button type="button" class="btn-small" data-tact="rename">이름 변경</button>
         <button type="button" class="btn-small" data-tact="dup">복제</button>
-        <button type="button" class="btn-small danger" data-tact="del">삭제</button>
+        <button type="button" class="btn-small danger" data-tact="del">삭제</button>`}
       </div>
       <p class="group-heading">품목 표 기본값 (품목 행을 추가할 때 자동 입력)</p>
       <div class="form-grid" style="margin-bottom:6px;">
@@ -139,7 +144,8 @@
   function bindTypeEditor(t, idx) {
     const box = $('typeEditor');
 
-    box.querySelector('[data-tact="rename"]').addEventListener('click', () => {
+    // 예약 종류(빈 발주서)에는 이름 변경·복제·삭제 버튼이 없다
+    box.querySelector('[data-tact="rename"]')?.addEventListener('click', () => {
       const name = window.prompt('새 종류 이름', t.name);
       if (name == null) return;
       const v = name.trim();
@@ -148,16 +154,17 @@
       t.name = v;
       markDirty(); renderTypeList(); renderTypeEditor();
     });
-    box.querySelector('[data-tact="dup"]').addEventListener('click', () => {
+    box.querySelector('[data-tact="dup"]')?.addEventListener('click', () => {
       const copy = JSON.parse(JSON.stringify(t));
       copy.id = uid('t');
+      copy.kind = 'normal';
       copy.name = uniqueTypeName(`${t.name} 복사`);
       state.settings.types.splice(idx + 1, 0, copy);
       state.selectedTypeId = copy.id;
       markDirty(); renderTypeList(); renderTypeEditor();
       toast(`'${copy.name}' 으로 복제했습니다. 이름을 바꿔 주세요.`);
     });
-    box.querySelector('[data-tact="del"]').addEventListener('click', async () => {
+    box.querySelector('[data-tact="del"]')?.addEventListener('click', async () => {
       const ok = await confirmDialog({ title: '종류 삭제', message: `'${t.name}' 종류와 그 선택지·기본값을 모두 삭제합니다. 계속할까요?`, okText: '삭제', danger: true });
       if (!ok) return;
       state.settings.types.splice(idx, 1);
@@ -372,8 +379,9 @@
   function renderPrices() {
     const s = state.settings;
     const sel = $('priceType');
-    if (!isNamedTable(state.priceTypeId) && !s.types.some(t => t.id === state.priceTypeId)) state.priceTypeId = s.types[0]?.id ?? null;
-    sel.innerHTML = [...s.types.map(t => [t.id, t.name]), [DELIVERY_ID, DELIVERY_LABEL], [EXTRA_ID, EXTRA_LABEL]]
+    const priceTypes = s.types.filter(t => !t.kind || t.kind === 'normal');   // 빈 발주서·납품서는 단가표 대상 아님
+    if (!isNamedTable(state.priceTypeId) && !priceTypes.some(t => t.id === state.priceTypeId)) state.priceTypeId = priceTypes[0]?.id ?? null;
+    sel.innerHTML = [...priceTypes.map(t => [t.id, t.name]), [DELIVERY_ID, DELIVERY_LABEL], [EXTRA_ID, EXTRA_LABEL]]
       .map(([id, name]) => `<option value="${esc(id)}" ${id === state.priceTypeId ? 'selected' : ''}>${esc(name)}</option>`).join('');
     $('priceCount').textContent = `전체 ${s.price_rules.length}줄`;
     $('priceHelp').style.display = isNamedTable(state.priceTypeId) ? 'none' : '';

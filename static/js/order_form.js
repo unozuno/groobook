@@ -4,7 +4,7 @@
           makeCombobox, debounce, toast, confirmDialog, choiceDialog, checklistDialog, planItemsHtml, uid, isBlank, parseInt0 } = OF;
   const $ = id => document.getElementById(id);
 
-  const BLANK_ORDER_LABEL = '빈 발주서';
+  const BLANK_ORDER_LABEL = '빈 발주서';      // 설정에 예약 종류(kind)가 없을 때의 대체 이름
   const BLANK_DELIVERY_LABEL = '납품서';
   const SIZE_FOLLOW_FIELDS = ['insert_size', 'cover_size'];
   const SIZE_SOURCE = 'inner_size';
@@ -31,6 +31,10 @@
   const typeNames = () => state.settings.types.map(t => t.name);
   const campusNames = () => state.settings.address_book.map(a => a.name);
   const currentType = () => state.settings.types.find(t => t.id === state.typeId) || null;
+  const kindType = kind => state.settings.types.find(t => t.kind === kind) || null;
+  const blankOrderLabel = () => (kindType('blank_order') || {}).name || BLANK_ORDER_LABEL;
+  const blankDeliveryLabel = () => (kindType('blank_delivery') || {}).name || BLANK_DELIVERY_LABEL;
+  const usesTypeDefaults = () => state.mode === 'order' || state.mode === 'blank_order';
   const isMulti = () => state.orderType === 'multi' && state.mode !== 'blank_delivery';
   const isBlankDelivery = () => state.mode === 'blank_delivery';
 
@@ -49,7 +53,7 @@
 
   function applyItemDefaults(it) {
     const t = currentType();
-    if (!t || state.mode !== 'order') return;
+    if (!t || !usesTypeDefaults()) return;
     const d = t.item_defaults || {};
     for (const key of ['qty', 'mono', 'insert', 'color']) {
       if (d[key] != null && isBlank(it[key])) it[key] = String(d[key]);
@@ -98,7 +102,7 @@
   function canFollow(fid) {
     const t = currentType();
     const src = normOpt(state.spec[SIZE_SOURCE]);
-    if (!t || state.mode !== 'order' || !src) return false;
+    if (!t || !usesTypeDefaults() || !src) return false;
     return ((t.fields[fid] && t.fields[fid].options) || []).some(o => normOpt(o) === src);
   }
 
@@ -126,7 +130,7 @@
     clearFollowNotes();
     const t = currentType();
     state.specTouched.clear();
-    if (t && state.mode === 'order') {
+    if (t && usesTypeDefaults()) {
       state.spec = typeDefaults(t);
       for (const f of SIZE_FOLLOW_FIELDS) state.sizeFollow[f] = false;
       applyRules();
@@ -144,14 +148,21 @@
     let newMode = 'order';
     let newType = null;
     let newName = '';
-    if (v === BLANK_ORDER_LABEL) {
-      newMode = 'blank_order';
+    const found = v ? state.settings.types.find(t => t.name === v) : null;
+    if (!v) {
+      // 비어 있음: 종류 미선택
+    } else if (found && found.kind === 'blank_delivery') {
+      newMode = 'blank_delivery'; newType = found;
+    } else if (found && found.kind === 'blank_order') {
+      newMode = 'blank_order'; newType = found;          // 종류명은 비워 둔다 (아래 입력칸에서 직접 입력)
+    } else if (found) {
+      newMode = 'order'; newType = found; newName = found.name;
     } else if (v === BLANK_DELIVERY_LABEL) {
       newMode = 'blank_delivery';
-    } else if (v) {
-      newType = state.settings.types.find(t => t.name === v) || null;
-      if (newType) { newMode = 'order'; newName = newType.name; }
-      else { newMode = 'blank_order'; newName = v; }
+    } else if (v === BLANK_ORDER_LABEL) {
+      newMode = 'blank_order'; newType = kindType('blank_order');
+    } else {
+      newMode = 'blank_order'; newType = kindType('blank_order'); newName = v;   // 등록되지 않은 이름
     }
     const sameType = newMode === state.mode && (newType ? newType.id : null) === state.typeId
       && (newMode !== 'blank_order' || newName === state.typeName);
@@ -177,8 +188,8 @@
   }
 
   function typeInputLabel() {
-    if (state.mode === 'blank_delivery') return BLANK_DELIVERY_LABEL;
-    if (state.mode === 'blank_order') return state.typeName || BLANK_ORDER_LABEL;
+    if (state.mode === 'blank_delivery') return blankDeliveryLabel();
+    if (state.mode === 'blank_order') return state.typeName || blankOrderLabel();
     const t = currentType();
     return t ? t.name : '';
   }
@@ -280,7 +291,7 @@
 
   function updateSpecDatalists() {
     const t = currentType();
-    for (const f of fieldIds()) fillDatalist('dl-' + f, t && state.mode === 'order' ? t.fields[f].options : []);
+    for (const f of fieldIds()) fillDatalist('dl-' + f, t && usesTypeDefaults() ? t.fields[f].options : []);
   }
 
   // ───────────── 렌더링: 전달사항 ─────────────
@@ -765,6 +776,7 @@
     $('messagesSection').style.display = bd ? 'none' : '';
     $('orderTypeField').style.display = bd ? 'none' : '';
     $('receivedDateField').style.display = bd ? 'none' : '';
+    $('jobNoField').style.display = bd ? 'none' : '';   // 납품서 시트에는 작업번호가 없다
     $('blankTypeNameField').style.display = state.mode === 'blank_order' ? '' : 'none';
     $('multiNameField').style.display = multi ? '' : 'none';
     $('campusLabel').textContent = '납품학원';
@@ -832,7 +844,7 @@
     } else if (!state.campus.trim()) {
       err('CAMPUS_REQUIRED', 'campus', '납품학원을 입력해 주세요.');
     }
-    if (!state.jobNo.trim()) warn('JOB_NO_MISSING', 'job_no', '작업번호가 비어 있어 발주서·납품서의 작업번호 칸이 빈칸으로 출력됩니다.');
+    if (!bd && !state.jobNo.trim()) warn('JOB_NO_MISSING', 'job_no', '작업번호가 비어 있어 발주서의 작업번호 칸이 빈칸으로 출력됩니다.');
     if (!state.dueDate) {
       warn('DUE_DATE_MISSING', 'due_date', `${bd ? '납품일' : '납기일자'}이 비어 있어 납품서의 납품일이 빈칸으로 출력됩니다.`);
     }
@@ -1191,7 +1203,7 @@
         renderAll();
       });
     }
-    $('blankTypeName').addEventListener('input', e => { state.typeName = e.target.value; $('typeInput').value = state.typeName || BLANK_ORDER_LABEL; });
+    $('blankTypeName').addEventListener('input', e => { state.typeName = e.target.value; $('typeInput').value = state.typeName || blankOrderLabel(); });
     $('receivedDate').addEventListener('input', e => { state.receivedDate = e.target.value; scheduleValidate(); });
     $('dueDate').addEventListener('input', e => { state.dueDate = e.target.value; state.serverIssues = null; scheduleValidate(); });
     $('campusInput').addEventListener('input', e => { if (!e.target.disabled) state.campus = e.target.value; state.serverIssues = null; scheduleValidate(); });
@@ -1224,7 +1236,8 @@
     if (!res.ok || !data) { showError('설정을 불러오지 못했습니다. 페이지를 새로고침해 주세요.'); return; }
     state.settings = data.settings;
     state.meta = data.meta;
-    fillDatalist('dl-types', [...typeNames(), BLANK_ORDER_LABEL, BLANK_DELIVERY_LABEL]);
+    fillDatalist('dl-types', [...new Set([...typeNames(),
+      ...(kindType('blank_order') ? [] : [BLANK_ORDER_LABEL]), ...(kindType('blank_delivery') ? [] : [BLANK_DELIVERY_LABEL])])]);
     fillDatalist('dl-campuses', campusNames());
     fillDatalist('dl-extras', state.meta.extra_presets || []);
     fillDatalist('dl-products', [...new Set(state.settings.price_rules.filter(r => r.type_id === 'delivery').map(r => r.product))]);

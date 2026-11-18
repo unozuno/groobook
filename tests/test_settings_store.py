@@ -13,7 +13,7 @@ def test_seed_is_valid_and_complete():
     s = validate_settings(build_seed_settings())
     names = [t["name"] for t in s["types"]]
     assert names == ["교재", "노트", "시험지", "명함", "브로셔", "안내문", "스탬프보드", "상품권",
-                     "레터지", "빙고판", "포스터", "상장", "졸업장", "초대장", "엽서"]
+                     "레터지", "빙고판", "포스터", "상장", "졸업장", "초대장", "엽서", "빈 발주서", "납품서"]
     for t in s["types"]:
         assert set(t["fields"]) == set(FIELD_IDS)
     assert len(s["address_book"]) == 53
@@ -68,7 +68,7 @@ def test_reset_restores_seed():
     settings_store.save_settings(s)
     assert len(settings_store.load_settings()["types"]) == 2
     settings_store.reset_settings()
-    assert len(settings_store.load_settings()["types"]) == 15
+    assert len(settings_store.load_settings()["types"]) == 17
 
 
 @pytest.mark.parametrize("mutate, fragment", [
@@ -110,7 +110,7 @@ def test_seed_has_price_rules_for_every_priced_type():
     by_type = {}
     for r in s["price_rules"]:
         by_type.setdefault(r["type_id"], []).append(r)
-    ids = {t["id"] for t in s["types"]} | {"delivery"}   # delivery = 납품서 모드 단가
+    ids = {t["id"] for t in s["types"] if t["kind"] == "normal"} | {"delivery"}   # delivery = 납품서 모드 단가
     assert set(by_type) == ids                       # 상장·초대장 등은 price=None 규칙으로 존재
     assert all(r["price"] is None for r in by_type["certificate"] + by_type["invitation"])
     assert len(by_type["textbook"]) == 28
@@ -187,7 +187,7 @@ def _write_v1(s):
 
 def test_new_seed_has_empty_emails():
     s = validate_settings(build_seed_settings())
-    assert s["schema_version"] == 3 and all(a["email"] == "" for a in s["address_book"])
+    assert s["schema_version"] == 4 and all(a["email"] == "" for a in s["address_book"])
 
 
 def test_legacy_emails_fill_empty_entries_ignoring_spaces(legacy_json):
@@ -226,14 +226,14 @@ def test_legacy_file_broken_is_ignored(legacy_json, content):
 def test_missing_legacy_file_is_ignored(tmp_path, monkeypatch):
     monkeypatch.setattr(settings_store, "LEGACY_EMAILS_PATH", tmp_path / "없음.json")
     _write_v1(_v1_settings())
-    assert settings_store.load_settings()["schema_version"] == 3
+    assert settings_store.load_settings()["schema_version"] == 4
 
 
 def test_migration_is_persisted_and_not_repeated(legacy_json):
     path = legacy_json({"대치본원": "a@test.kr"})
     _write_v1(_v1_settings())
     settings_store.load_settings()
-    assert json.loads(settings_store.settings_path().read_text(encoding="utf-8"))["schema_version"] == 3
+    assert json.loads(settings_store.settings_path().read_text(encoding="utf-8"))["schema_version"] == 4
     s = settings_store.load_settings()
     s["address_book"][0]["email"] = ""                       # 사용자가 지운 값은 json 이 다시 채우지 않는다
     settings_store.save_settings(s)
@@ -328,3 +328,27 @@ def test_extra_rules_survive_type_deletion():
     s["price_rules"].append(_extra_rule("e1", "택배비", 3000))
     s["types"] = [t for t in s["types"] if t["id"] != "poster"]
     assert any(r["type_id"] == "extra" for r in validate_settings(s)["price_rules"])
+
+
+def test_v3_settings_get_blank_types_appended_in_order():
+    s = build_seed_settings()
+    s["types"] = [t for t in s["types"] if t.get("kind", "normal") == "normal"]
+    s["schema_version"] = 3
+    s["types"][0]["name"] = "내 교재"
+    settings_store._write_atomic(settings_store.settings_path(), s)
+    loaded = settings_store.load_settings()
+    assert loaded["schema_version"] == 4
+    assert [t["kind"] for t in loaded["types"]][-2:] == ["blank_order", "blank_delivery"]
+    assert loaded["types"][0]["name"] == "내 교재"
+
+
+def test_reserved_types_cannot_be_renamed_or_duplicated():
+    s = build_seed_settings()
+    s["types"][-2]["name"] = "다른 이름"
+    with pytest.raises(SettingsValidationError):
+        validate_settings(s)
+    s = build_seed_settings()
+    dup = copy.deepcopy(s["types"][-1]); dup["id"] = "x"; dup["name"] = "납품서2"
+    s["types"].append(dup)
+    with pytest.raises(SettingsValidationError):
+        validate_settings(s)

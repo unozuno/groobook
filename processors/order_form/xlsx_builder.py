@@ -6,6 +6,9 @@
 - 발주서 품목 행 수는 품목 수만큼, 납품서는 5행(≤5건)·10행(6~10건)·그 이상은 품목 수만큼이며 합계 수식 범위도 함께 늘어난다.
 외부 파일 참조는 전혀 쓰지 않는다.
 """
+import os
+import tempfile
+from pathlib import Path
 from io import BytesIO
 
 from openpyxl import Workbook
@@ -13,6 +16,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
 
+from processors.order_form.calc_cache import compute_cached
 from processors.order_form.models import DeliveryNote, Order
 
 # ───────── 스타일 상수 ─────────
@@ -22,7 +26,7 @@ _MEDIUM = Side(style="medium")
 BOX = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 BOTTOM = Border(bottom=_THIN)
 SIDES = Border(left=_THIN, right=_THIN)
-NUM_FMT = '_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-'
+NUM_FMT = '#,##0;-#,##0;;@'   # 0 은 공란으로 표시 (엑셀 회계 서식의 '-' 대신)
 DATE_FMT = '[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy'
 CENTER = Alignment(horizontal="center", vertical="center")
 LEFT = Alignment(horizontal="left", vertical="center")
@@ -32,7 +36,8 @@ MEMO_ALIGN = Alignment(horizontal="left", vertical="center", wrap_text=True)
 F12 = Font(size=12, bold=True)
 F14_RED = Font(size=14, bold=True, color="FF0000")
 F20 = Font(size=20, bold=True)
-F20_RED = Font(size=20, bold=True, color="FF0000")
+TYPE_FILL = PatternFill("solid", fgColor="FCD582")   # 제작 종류 셀 배경 (R252 G213 B130)
+_DOUBLE = Side(style="double")
 F24 = Font(size=24, bold=True)
 F8 = Font(size=8, bold=True)
 
@@ -119,7 +124,7 @@ def write_order_sheet(ws, order: Order) -> None:
     # 1행 제목
     _set(ws, 1, 3, "그루북", font=F20, align=RIGHT)
     ws.merge_cells("D1:E1")
-    _set(ws, 1, 4, order.type_name or None, font=F20_RED)
+    _set(ws, 1, 4, order.type_name or None, font=F20, fill=TYPE_FILL)
     _set(ws, 1, 6, "제작 요청서", font=F20, align=LEFT)
 
     # 2~8행 기본 정보 + 사양
@@ -223,7 +228,7 @@ def write_order_sheet(ws, order: Order) -> None:
 # ───────── 납품서 ─────────
 
 def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
-    for col, w in {"A": 6.2, "B": 32, "C": 18.7, "D": 11, "E": 11, "F": 13, "G": 9}.items():
+    for col, w in {"A": 5.8, "B": 36, "C": 17.1, "D": 17.1, "E": 17.1, "F": 17.1, "G": 9}.items():
         ws.column_dimensions[col].width = w
 
     ws.merge_cells("A1:F1")
@@ -235,7 +240,6 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
     ws.merge_cells("C3:D3")
     _set(ws, 3, 3, order.due_date, border=BOTTOM, fmt=DATE_FMT)
     _set(ws, 3, 4, None, border=BOTTOM)
-    _set(ws, 3, 6, _job_no_value(order.job_no), font=F20)
 
     ws.merge_cells("A5:B5")
     _set(ws, 5, 1, "수령자", border=BOX)
@@ -288,11 +292,20 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
     _set(ws, t, DCOL_NO, "합계", border=BOX)
     _set(ws, t, DCOL_NAME, None, border=BOX)
     _set(ws, t, DCOL_QTY, f"=SUM(C{first}:C{last})", border=BOX, fmt=NUM_FMT)
-    _set(ws, t, DCOL_PAGES, None, border=BOX)
-    _set(ws, t, DCOL_PRICE, None, border=BOX)
+    _set(ws, t, DCOL_PAGES, f"=SUM(D{first}:D{last})", border=BOX, fmt=NUM_FMT)
+    _set(ws, t, DCOL_PRICE, f"=SUM(E{first}:E{last})", border=BOX, fmt=NUM_FMT)
     _set(ws, t, DCOL_AMOUNT, f"=SUM(F{first}:F{last})", border=BOX, fmt=NUM_FMT)
 
     _outline_medium(ws, 7, DCOL_NO, t, DCOL_AMOUNT)
+    # 머리글(8행)과 품목(9행) 사이는 이중선
+    for c in range(DCOL_NO, DCOL_AMOUNT + 1):
+        c8, c9 = ws.cell(row=8, column=c), ws.cell(row=9, column=c)
+        # no·제품명·수량은 7~8행 병합이라 읽을 때 왼쪽 위 셀(7행)의 테두리를 따른다 → 7행에도 지정
+        for cell in ((ws.cell(row=7, column=c), c8) if c <= DCOL_QTY else (c8,)):
+            b = cell.border
+            cell.border = Border(left=b.left, right=b.right, top=b.top, bottom=_DOUBLE)
+        b = c9.border
+        c9.border = Border(left=b.left, right=b.right, top=_DOUBLE, bottom=b.bottom)
 
     addr_row = t + 2
     _set(ws, addr_row, 1, f"인수처 주소 : {note.address or ''}".rstrip(), align=LEFT)
@@ -323,4 +336,18 @@ def build_workbook(order: Order) -> bytes:
     wb.calculation.fullCalcOnLoad = True
     buf = BytesIO()
     wb.save(buf)
-    return buf.getvalue()
+    data = buf.getvalue()
+    # 미리보기·Numbers 등 다시 계산하지 않는 프로그램에서도 합계가 보이도록 계산값을 함께 저장한다
+    cached = compute_cached(wb, {}, {"sheets": {}})
+    if not cached:
+        return data
+    from processors.order_form.workbook_io import inject_cached_values   # 순환 import 방지
+    fd, tmp = tempfile.mkstemp(suffix=".xlsx")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        inject_cached_values(Path(tmp), cached)
+        with open(tmp, "rb") as f:
+            return f.read()
+    finally:
+        os.unlink(tmp)

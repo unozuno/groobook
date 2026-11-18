@@ -1,12 +1,14 @@
 """관리자 설정 스키마 (Pydantic). 저장·가져오기 전에 구조와 중복을 검증한다."""
 import re
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from processors.order_form.fields import FIELD_IDS, ITEM_DEFAULT_KEYS
 from processors.order_form.pricing_models import NAMED_TYPE_IDS, PriceRule
 
+
+RESERVED_KINDS = {"blank_order": "빈 발주서", "blank_delivery": "납품서"}
 
 EMAIL_PATTERN = re.compile(r"[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+")
 
@@ -60,6 +62,7 @@ class OrderType(BaseModel):
     name: str = Field(min_length=1)
     fields: dict[str, FieldOptions] = Field(default_factory=dict)
     item_defaults: dict[str, Optional[int]] = Field(default_factory=dict)
+    kind: Literal["normal", "blank_order", "blank_delivery"] = "normal"
 
     @field_validator("name")
     @classmethod
@@ -177,6 +180,13 @@ class OrderSettings(BaseModel):
         dup = sorted({n for n in names if names.count(n) > 1})
         if dup:
             raise ValueError(f"제작 종류 이름이 중복됩니다: {', '.join(dup)}")
+
+        for kind, label in RESERVED_KINDS.items():
+            of_kind = [t for t in self.types if t.kind == kind]
+            if len(of_kind) > 1:
+                raise ValueError(f"'{label}' 종류는 하나만 둘 수 있습니다.")
+            if of_kind and (of_kind[0].name != label or of_kind[0].id != kind):
+                raise ValueError(f"'{label}' 종류의 이름은 바꿀 수 없습니다.")
 
         aids = [a.id for a in self.address_book]
         if len(aids) != len(set(aids)):

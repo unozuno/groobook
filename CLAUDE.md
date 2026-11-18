@@ -163,7 +163,8 @@ All task state lives in two in-memory dicts in `main.py` (`tasks`, `email_scans`
 - Filenames: `{YYMMDD 오늘, Asia/Seoul} 그루북 {학원|다중이름} {종류}발주.xlsx`; 납품서 mode: `… {납품학원} 납품서.xlsx`. Sheet names sanitized to Excel rules (31 chars, no `\ / ? * [ ] :`) and de-duplicated with ` (2)`.
 - 작업번호 is optional: empty → warning `JOB_NO_MISSING` (blank cell in the sheets), never an error.
 - Validation codes (`validation.py`) are mirrored in `order_form.js` — change both together.
-- 빈 발주서 / 납품서 are fixed **modes**, not editable types; 졸업장/엽서 are independent copies of 상장/초대장 in the seed.
+- 빈 발주서 / 납품서 are **reserved 제작 종류** (`OrderType.kind` = `blank_order` / `blank_delivery`, ids/names fixed, seeded at the end of `types`, schema v4 appends them to older files). They cannot be renamed/duplicated/deleted in 공통설정, but can be reordered (the 발주서 작성 dropdown follows `types` order). `blank_order` has editable defaults/options/item defaults like other types (mode stays `blank_order`, free-text spec); `blank_delivery` has no content (only its dropdown position) and is excluded from the 단가표 type select. 졸업장/엽서 are independent copies of 상장/초대장 in the seed.
+- 납품서 시트에는 작업번호가 없다 (발주서 I3만). `blank_delivery` 모드에서는 작업번호 입력란을 숨기고 `JOB_NO_MISSING` 경고도 내지 않는다. 발주서 제목의 제작 종류 셀(D1:E1)은 검정 글씨 + 배경 RGB(252,213,130)=`FCD582`. 납품서 8행(머리글)·9행(첫 품목) 사이는 이중선. 숫자 서식 `NUM_FMT`=`#,##0;-#,##0;;@` 이라 0은 공란으로 보인다(값은 0 그대로).
 
 ## Git & Commit Guidelines
 

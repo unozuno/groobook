@@ -1,5 +1,6 @@
 import json
 import threading
+from pathlib import Path
 import uuid
 from io import BytesIO
 
@@ -37,6 +38,17 @@ load_dotenv()
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+
+def _asset_version() -> int:
+    """static 파일 수정 시각 — 스크립트 주소에 붙여 브라우저가 옛 JS 를 캐시로 쓰지 않게 한다."""
+    try:
+        return int(max(p.stat().st_mtime for p in Path("static").rglob("*.js")))
+    except (OSError, ValueError):
+        return 0
+
+
+templates.env.globals["asset_v"] = _asset_version
 
 # 인메모리 작업 저장소
 tasks: dict[str, dict] = {}

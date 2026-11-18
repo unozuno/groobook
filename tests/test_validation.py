@@ -89,10 +89,12 @@ def test_item_name_required_in_blank_delivery(settings):
 
 
 def test_job_no_is_optional_with_warning(settings):
-    for mode, extra in (("order", {}), ("blank_delivery", {"campus": "분당캠퍼스"})):
-        res, order = validate(base_request(mode=mode, job_no="  ", **extra), settings)
-        assert order is not None and not res.errors
-        assert [(i.code, i.path) for i in res.warnings if i.path == "job_no"] == [("JOB_NO_MISSING", "job_no")]
+    res, order = validate(base_request(job_no="  "), settings)
+    assert order is not None and not res.errors
+    assert [(i.code, i.path) for i in res.warnings if i.path == "job_no"] == [("JOB_NO_MISSING", "job_no")]
+    # 납품서 시트에는 작업번호 칸이 없으므로 납품서 모드에서는 경고하지 않는다
+    res, order = validate(base_request(mode="blank_delivery", job_no="  ", campus="분당캠퍼스"), settings)
+    assert order is not None and not res.errors and not [i for i in res.warnings if i.path == "job_no"]
     res, _ = validate(base_request(job_no="2105"), settings)
     assert res.ok and not [i for i in res.warnings if i.path == "job_no"]
 

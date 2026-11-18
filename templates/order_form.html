@@ -52,7 +52,7 @@
             <label for="multiName">다중 발주명 (파일명에 사용)</label>
             <input id="multiName" type="text" placeholder="예: 최선전분원">
           </div>
-          <div class="field">
+          <div class="field" id="jobNoField">
             <label for="jobNo">작업번호</label>
             <input id="jobNo" type="text" placeholder="공장에서 받은 작업번호">
           </div>
@@ -157,7 +157,7 @@
   <datalist id="dl-products"></datalist>
   <datalist id="dl-extras"></datalist>
 
-  <script src="/static/js/order_common.js"></script>
-  <script src="/static/js/order_form.js"></script>
+  <script src="/static/js/order_common.js?v={{ asset_v() }}"></script>
+  <script src="/static/js/order_form.js?v={{ asset_v() }}"></script>
 </body>
 </html>

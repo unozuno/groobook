@@ -19,7 +19,8 @@ def test_single_order_layout(sample_order):
     ws = wb["발주서"]
     assert (ws["C1"].value, ws["D1"].value, ws["F1"].value) == ("그루북", "교재", "제작 요청서")
     # 입력칸 노란 배경은 쓰지 않는다 (머리글 연두색만 유지)
-    assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=1, max_row=9) for c in row)
+    assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=2, max_row=9) for c in row)
+    assert all(c.fill.fill_type is None for c in ws[1] if c.column not in (4, 5))
     assert all(c.fill.fill_type is None for row in ws.iter_rows(min_row=11, max_row=21, min_col=1, max_col=14) for c in row)
     assert ws["C2"].value == datetime(2026, 11, 8) and ws["F2"].value == datetime(2026, 11, 10)
     assert ws["C3"].value == "평촌캠퍼스" and ws["I3"].value == 2105
@@ -55,7 +56,7 @@ def test_delivery_sheet_layout(sample_order):
     data, wb = _wb(sample_order)
     ws = wb["납품서"]
     assert ws["A1"].value == "납   품   명   세   서"
-    assert ws["C3"].value == datetime(2026, 11, 10) and ws["F3"].value == 2105
+    assert ws["C3"].value == datetime(2026, 11, 10) and ws["F3"].value is None   # 납품서에는 작업번호 없음
     assert ws["C5"].value == "평촌캠퍼스" and ws["F5"].value == "그루북"
     assert (ws["D8"].value, ws["E8"].value, ws["F8"].value) == ("페이지", "단가", "공급액")
     assert (ws["B9"].value, ws["C9"].value, ws["D9"].value, ws["E9"].value) == ("중2 영어 내신", 700, 2, 660)
@@ -93,7 +94,7 @@ def test_multi_order_sheets(sample_multi_order):
         [("중2 영어 내신", 700), ("교사용", 5), (None, None)]
     b = wb["납품서_분당캠퍼스"]
     assert [(b.cell(r, 2).value, b.cell(r, 3).value) for r in (9, 10)] == [("중2 영어 내신", 300), ("중3 영어 내신", 10)]
-    assert b["C3"].value == datetime(2026, 11, 10) and b["F3"].value == 2105
+    assert b["C3"].value == datetime(2026, 11, 10) and b["F3"].value is None
     assert b["A16"].value.startswith("인수처 주소 : 경기도 성남시")
     verify_workbook(data, sample_multi_order)
 
@@ -151,7 +152,8 @@ def test_order_sheet_format(sample_order):
     ws = wb["발주서"]
     # 날짜 중앙, 제작 종류 빨강, 납기일자 라벨은 E2 단일 셀
     assert ws["C2"].alignment.horizontal == "center" and ws["F2"].alignment.horizontal == "center"
-    assert ws["D1"].font.color.rgb.endswith("FF0000")
+    assert ws["D1"].font.color is None or ws["D1"].font.color.rgb in (None, "FF000000")   # 검정
+    assert ws["D1"].fill.fgColor.rgb.endswith("FCD582")
     assert ws["E2"].value == "납기일자" and ws["H2"].value is None
     merged = [str(r) for r in ws.merged_cells.ranges]
     assert "F2:H2" in merged and "H2:J2" not in merged
@@ -216,3 +218,33 @@ def test_delivery_extras_only_in_their_campus_sheet(make_order):
     assert wb["납품서_평촌캠퍼스"]["B10"].value is None
     assert wb["납품서_분당캠퍼스"]["B10"].value == "디자인비"
     verify_workbook(data, order)
+
+
+def test_delivery_double_line_between_header_and_items(sample_order):
+    _, wb = _wb(sample_order)
+    ws = wb["납품서"]
+    for c in range(1, 7):
+        assert ws.cell(8, c).border.bottom.style == "double"
+        assert ws.cell(9, c).border.top.style == "double"
+    assert ws["A7"].border.top.style == "medium" and ws["A9"].border.left.style == "medium"
+
+
+def test_zero_numbers_are_hidden_by_format(sample_order):
+    _, wb = _wb(sample_order)
+    fmt = wb["발주서"]["E11"].number_format
+    assert fmt == "#,##0;-#,##0;;@"            # 0 은 빈 문자열 구간
+    assert wb["납품서"]["F14"].number_format == fmt
+
+
+def test_totals_have_cached_values_for_non_recalculating_viewers(sample_order):
+    import io, zipfile
+    data, _ = _wb(sample_order)
+    xml = zipfile.ZipFile(io.BytesIO(data)).read("xl/worksheets/sheet2.xml").decode("utf-8")
+    assert "<f>SUM(C9:C13)</f><v>1005</v>" in xml
+
+
+def test_delivery_totals_and_column_widths(sample_order):
+    _, wb = _wb(sample_order)
+    ws = wb["납품서"]
+    assert ws["D14"].value == "=SUM(D9:D13)" and ws["E14"].value == "=SUM(E9:E13)"
+    assert [ws.column_dimensions[c].width for c in "ABCDEF"] == [5.8, 36, 17.1, 17.1, 17.1, 17.1]

@@ -48,7 +48,7 @@ def test_get_settings_with_meta(client):
     body = res.json()
     assert len(body["meta"]["fields"]) == 14
     assert body["meta"]["groups"][0]["name"] == "제본"
-    assert len(body["settings"]["types"]) == 15
+    assert len(body["settings"]["types"]) == 17
     assert len(body["meta"]["today"]) == 10
 
 
@@ -82,7 +82,7 @@ def test_export_and_reset(client):
     client.put("/api/order-settings", json={"settings": s})
     assert len(client.get("/api/order-settings").json()["settings"]["types"]) == 1
     res = client.post("/api/order-settings/reset")
-    assert res.status_code == 200 and len(res.json()["settings"]["types"]) == 15
+    assert res.status_code == 200 and len(res.json()["settings"]["types"]) == 17
 
 
 def test_generate_single_returns_xlsx_and_archives(client):

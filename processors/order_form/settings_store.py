@@ -12,7 +12,7 @@ from pathlib import Path
 
 from processors.order_form.clock import now_iso
 from processors.order_form.desktop_paths import norm_name
-from processors.order_form.seed import SCHEMA_VERSION, build_seed_settings
+from processors.order_form.seed import SCHEMA_VERSION, SEED_BLANK_TYPES, build_seed_settings
 from processors.order_form.seed_prices import SEED_DELIVERY_RULES, SEED_PRICE_RULES
 from processors.order_form.settings_models import SettingsValidationError, validate_settings
 
@@ -78,6 +78,17 @@ def _merge_campus_emails(data: dict, path: Path | None = None) -> None:
         by_name[norm_name(new["name"])] = new
 
 
+def _add_blank_types(data: dict) -> None:
+    """v3→v4: 빈 발주서·납품서를 제작 종류 목록 끝에 추가한다 (같은 이름의 종류가 이미 있으면 건너뜀)."""
+    types = data.setdefault("types", [])
+    names = {t.get("name") for t in types}
+    ids = {t.get("id") for t in types}
+    for seed in SEED_BLANK_TYPES:
+        if seed["name"] in names or seed["id"] in ids:
+            continue
+        types.append(copy.deepcopy(seed))
+
+
 def migrate(data: dict) -> dict:
     """스키마 버전 업그레이드 지점. 상위 버전은 거부하고, 단가표가 없던 옛 파일에는 초기 단가표를 채운다."""
     version = data.get("schema_version", 1)
@@ -87,6 +98,8 @@ def migrate(data: dict) -> dict:
         )
     if version < 2:
         _merge_campus_emails(data)
+    if version < 4:
+        _add_blank_types(data)
     data["schema_version"] = SCHEMA_VERSION
     if "price_rules" not in data:   # 키 자체가 없을 때만 (관리자가 비운 [] 는 존중)
         data["price_rules"] = copy.deepcopy(SEED_PRICE_RULES)
