@@ -118,3 +118,45 @@ def test_insert_refuses_merge_spanning_insertion_point():
     lay = es.find_layout(ws)
     with pytest.raises(es.EstimateError):
         es.insert_item_row(ws, lay)
+
+
+def _borders(ws):
+    return {(c.row, c.column): tuple(getattr(getattr(c.border, k), "style", None) for k in ("left", "right", "top", "bottom"))
+            for row in ws.iter_rows() for c in row}
+
+
+def test_insert_keeps_existing_borders_of_merged_edge_cells():
+    """병합 범위 끝 칸(O열 등)의 테두리가 왼쪽 위 칸과 달라도, 줄 삽입 뒤 원래 테두리 그대로여야 한다."""
+    from openpyxl.styles import Border, Side
+    _, ws = make_ws(filled=0)
+    thin = Side(style="thin")
+    for r in range(ESTIMATE_FIRST, ESTIMATE_LAST + 1):
+        ws.cell(r, 14).border = Border(left=thin)           # N: 우측 없음
+        ws.cell(r, 15).border = Border(bottom=thin)                     # O: 우측 테두리 없음 (왼쪽 위 N 과 다름)
+    for c in range(2, 16):
+        ws.cell(35, c).border = Border(bottom=thin)                     # B31:O35 안내문 영역 끝 칸
+    ws["B31"].border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    lay = es.find_layout(ws)
+    before = _borders(ws)
+    for r in range(lay.first, lay.last + 1):
+        ws.cell(r, 2).value = "x"
+    at = es.insert_item_row(ws, lay)
+    after = _borders(ws)
+    for (r, c), sig in before.items():
+        assert after[(r + 1 if r >= at else r, c)] == sig, (r, c)
+    # 새 줄 = 소스 줄(바로 위 줄)의 칸별 테두리, 단 O열 우측 테두리는 없음
+    for c in range(1, 15):
+        assert after[(at, c)] == before[(at - 1, c)], c
+    left, _, top, bottom = before[(at - 1, 15)]
+    assert after[(at, 15)] == (left, None, top, bottom)
+
+
+def test_inserted_row_has_no_right_border_on_last_column():
+    _, ws = make_ws(filled=0)
+    lay = es.find_layout(ws)
+    for r in range(lay.first, lay.last + 1):
+        ws.cell(r, 2).value = "x"
+    assert ws.cell(lay.last, 15).border.right.style == "thin"
+    at = es.insert_item_row(ws, lay)
+    assert ws.cell(at, 15).border.right.style is None
+    assert ws.cell(at - 1, 15).border.right.style == "thin"      # 기존 줄은 그대로

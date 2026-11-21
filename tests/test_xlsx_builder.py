@@ -52,6 +52,13 @@ def test_single_order_layout(sample_order):
     verify_workbook(data, sample_order)
 
 
+def test_order_item_name_centered(sample_order):
+    _, wb = _wb(sample_order)
+    ws = wb["발주서"]
+    names = [ws[f"C{r}"] for r in range(11, 22) if ws[f"C{r}"].value]
+    assert names and all(c.alignment.horizontal == "center" for c in names)
+
+
 def test_delivery_sheet_layout(sample_order):
     data, wb = _wb(sample_order)
     ws = wb["납품서"]
@@ -218,6 +225,15 @@ def test_delivery_extras_only_in_their_campus_sheet(make_order):
     assert wb["납품서_평촌캠퍼스"]["B10"].value is None
     assert wb["납품서_분당캠퍼스"]["B10"].value == "디자인비"
     verify_workbook(data, order)
+
+
+def test_delivery_numeric_columns_right_aligned(sample_order):
+    _, wb = _wb(sample_order)
+    ws = wb["납품서"]
+    for r in range(9, 15):          # 품목 줄 ~ 합계 줄
+        for col in "CDEF":
+            assert ws[f"{col}{r}"].alignment.horizontal == "right", f"{col}{r}"
+    assert ws["A14"].alignment.horizontal == "center"
 
 
 def test_delivery_double_line_between_header_and_items(sample_order):

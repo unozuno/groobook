@@ -12,6 +12,7 @@ from typing import Callable, Optional
 
 from openpyxl.formula import Tokenizer
 from openpyxl.formula.tokenizer import Token
+from openpyxl.styles import Border, Side
 from openpyxl.utils import get_column_letter as L
 from openpyxl.utils.cell import coordinate_from_string
 
@@ -136,6 +137,11 @@ def insert_item_row(ws, layout: EstimateLayout) -> int:
     max_row, max_col = ws.max_row, ws.max_column
     heights = {r: ws.row_dimensions[r].height for r in range(at - 1, max_row + 1) if r in ws.row_dimensions}
 
+    # 병합을 풀었다 다시 합치면 openpyxl 이 병합 범위 가장자리 칸의 테두리를 왼쪽 위 칸 기준으로 다시 계산해
+    # 원본 서식(예: O열 우측 테두리)이 바뀔 수 있다 → 원래 칸별 서식을 저장해 두었다가 그대로 되돌린다.
+    saved = {(r, c): copy(ws.cell(r, c)._style)
+             for r in range(at - 1, max_row + 1) for c in range(1, max_col + 1)}
+
     for r0, c0, r1, c1 in merges:
         if r0 >= at:
             ws.unmerge_cells(start_row=r0, start_column=c0, end_row=r1, end_column=c1)
@@ -155,6 +161,16 @@ def insert_item_row(ws, layout: EstimateLayout) -> int:
     for r0, c0, r1, c1 in merges:
         if r0 == r1 == src:
             ws.merge_cells(start_row=at, start_column=c0, end_row=at, end_column=c1)
+    # 재병합이 바꿔 놓은 가장자리 서식을 원본(이동한 칸) / 소스 줄(새 줄)의 칸별 서식으로 복원
+    for (r, c), style in saved.items():
+        if r >= at:
+            ws.cell(r + 1, c)._style = copy(style)
+    for c in range(1, max_col + 1):
+        ws.cell(at, c)._style = copy(saved[(src, c)])
+    # 새 줄의 O열(표 맨 오른쪽 칸) 우측 테두리는 두지 않는다 (원본/참조 청구서 모두 동일 규칙)
+    last = ws.cell(at, max_col)
+    b = copy(last.border)
+    last.border = Border(left=b.left, right=Side(), top=b.top, bottom=b.bottom)
 
     for row in ws.iter_rows():
         for cell in row:

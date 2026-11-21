@@ -188,7 +188,7 @@ def write_order_sheet(ws, order: Order) -> None:
         it = order.items[idx] if idx < len(order.items) else None
         _set(ws, r, COL_NO, idx + 1, border=BOX)
         _set(ws, r, COL_SCHOOL, None, border=BOX)
-        _set(ws, r, COL_NAME, it.name if it and it.name else None, align=LEFT, border=BOX)
+        _set(ws, r, COL_NAME, it.name if it and it.name else None, border=BOX)
         _set(ws, r, COL_BODY_NO, f"=A{r}", border=BOX)
         _set(ws, r, COL_QTY, it.qty if it else None, border=BOX, fmt=NUM_FMT)
         _set(ws, r, COL_MONO, it.mono if it else None, border=BOX, fmt=NUM_FMT)
@@ -273,28 +273,28 @@ def write_delivery_sheet(ws, order: Order, note: DeliveryNote) -> None:
         price = note.unit_prices[idx] if line and idx < len(note.unit_prices) else None
         _set(ws, r, DCOL_NO, idx + 1, border=BOX)
         _set(ws, r, DCOL_NAME, line.item.name if line and line.item.name else None, border=BOX)
-        _set(ws, r, DCOL_QTY, line.qty if line else None, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, DCOL_PAGES, line.item.pages if line else None, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, DCOL_PRICE, price, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, DCOL_AMOUNT, f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")', border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_QTY, line.qty if line else None, align=RIGHT, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_PAGES, line.item.pages if line else None, align=RIGHT, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_PRICE, price, align=RIGHT, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_AMOUNT, f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")', align=RIGHT, border=BOX, fmt=NUM_FMT)
 
     for k, ex in enumerate(note.extras):
         idx = len(note.lines) + k
         r = first + idx
         _set(ws, r, DCOL_NO, idx + 1, border=BOX)
         _set(ws, r, DCOL_NAME, ex.name, border=BOX)
-        _set(ws, r, DCOL_QTY, ex.qty, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, DCOL_PAGES, None, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, DCOL_PRICE, ex.unit_price, border=BOX, fmt=NUM_FMT)
-        _set(ws, r, DCOL_AMOUNT, f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")', border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_QTY, ex.qty, align=RIGHT, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_PAGES, None, align=RIGHT, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_PRICE, ex.unit_price, align=RIGHT, border=BOX, fmt=NUM_FMT)
+        _set(ws, r, DCOL_AMOUNT, f'=IF(AND(C{r}>0,E{r}<>""),C{r}*E{r},"")', align=RIGHT, border=BOX, fmt=NUM_FMT)
 
     t = last + 1
     _set(ws, t, DCOL_NO, "합계", border=BOX)
     _set(ws, t, DCOL_NAME, None, border=BOX)
-    _set(ws, t, DCOL_QTY, f"=SUM(C{first}:C{last})", border=BOX, fmt=NUM_FMT)
-    _set(ws, t, DCOL_PAGES, f"=SUM(D{first}:D{last})", border=BOX, fmt=NUM_FMT)
-    _set(ws, t, DCOL_PRICE, f"=SUM(E{first}:E{last})", border=BOX, fmt=NUM_FMT)
-    _set(ws, t, DCOL_AMOUNT, f"=SUM(F{first}:F{last})", border=BOX, fmt=NUM_FMT)
+    _set(ws, t, DCOL_QTY, f"=SUM(C{first}:C{last})", align=RIGHT, border=BOX, fmt=NUM_FMT)
+    _set(ws, t, DCOL_PAGES, f"=SUM(D{first}:D{last})", align=RIGHT, border=BOX, fmt=NUM_FMT)
+    _set(ws, t, DCOL_PRICE, f"=SUM(E{first}:E{last})", align=RIGHT, border=BOX, fmt=NUM_FMT)
+    _set(ws, t, DCOL_AMOUNT, f"=SUM(F{first}:F{last})", align=RIGHT, border=BOX, fmt=NUM_FMT)
 
     _outline_medium(ws, 7, DCOL_NO, t, DCOL_AMOUNT)
     # 머리글(8행)과 품목(9행) 사이는 이중선
