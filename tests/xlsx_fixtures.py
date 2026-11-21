@@ -93,6 +93,43 @@ def make_invoice(path: Path, existing_sheets=("1008내신블랭크",)) -> Path:
     return path
 
 
+def add_excel_style_external_link(path: Path, drawing_comment: str = "") -> Path:
+    """엑셀이 저장한 모양의 외부 링크(관계 2개: rId1 상대경로 + rId2 절대경로, alternateUrls)를 zip 패치로 추가한다.
+    drawing_comment 가 있으면 그림 XML 끝에 주석을 붙여 '원본 바이트'를 구분할 수 있게 한다."""
+    import zipfile
+    with zipfile.ZipFile(path) as z:
+        files = {n: z.read(n) for n in z.namelist()}
+    ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    files["xl/externalLinks/externalLink1.xml"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<externalLink xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="xxl21" '
+        'xmlns:xxl21="http://schemas.microsoft.com/office/spreadsheetml/2021/extlinks2021">'
+        f'<externalBook xmlns:r="{ns}" r:id="rId1"><xxl21:alternateUrls><xxl21:absoluteUrl r:id="rId2"/>'
+        '</xxl21:alternateUrls><sheetNames><sheetName val="팀장"/></sheetNames></externalBook></externalLink>').encode()
+    files["xl/externalLinks/_rels/externalLink1.xml.rels"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        f'<Relationship Id="rId2" Type="{ns}/externalLinkPath" Target="file:///C:\\Users\\a\\주소록.xlsx" TargetMode="External"/>'
+        f'<Relationship Id="rId1" Type="{ns}/externalLinkPath" Target="주소록.xlsx" TargetMode="External"/>'
+        '</Relationships>').encode()
+    wbx = files["xl/workbook.xml"].decode()
+    wbx = wbx.replace("</sheets>", f'</sheets><externalReferences><externalReference xmlns:r="{ns}" r:id="rId99"/></externalReferences>', 1)
+    files["xl/workbook.xml"] = wbx.encode()
+    rels = files["xl/_rels/workbook.xml.rels"].decode().replace(
+        "</Relationships>", f'<Relationship Id="rId99" Type="{ns}/externalLink" Target="externalLinks/externalLink1.xml"/></Relationships>')
+    files["xl/_rels/workbook.xml.rels"] = rels.encode()
+    ct = files["[Content_Types].xml"].decode().replace(
+        "</Types>", '<Override PartName="/xl/externalLinks/externalLink1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/></Types>')
+    files["[Content_Types].xml"] = ct.encode()
+    if drawing_comment:
+        files["xl/drawings/drawing1.xml"] += f"<!--{drawing_comment}-->".encode()
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for n, d in files.items():
+            z.writestr(n, d)
+    return path
+
+
 def make_marketing(path: Path, rows: dict | None = None, campuses=None) -> Path:
     """소모품출고내역(학원별 6열 구역, 2행 병합 머리글, 3행 머리글, 48행 합계) + 재고 LIST.
     rows: {학원명: [(date, 제품명, 부수, 페이지, 단가, 금액), ...]}"""

@@ -4,7 +4,7 @@ import pytest
 from openpyxl import load_workbook
 
 from processors.order_form import workbook_io as wio
-from xlsx_fixtures import make_invoice, make_marketing
+from xlsx_fixtures import add_excel_style_external_link, make_invoice, make_marketing
 
 
 def _open_and_snap(path):
@@ -116,3 +116,47 @@ def test_inject_cached_values_keeps_formulas_and_ignores_unknown_targets(tmp_pat
     data = load_workbook(p, data_only=True)["견적서"]
     assert (data["G13"].value, data["K13"].value, data["A1"].value) == (10, 5000.5, "텍스트")
     assert load_workbook(p)["견적서"]["G13"].value == "='1117l자화일'!C19"
+
+
+# ───────── 외부 링크·그림 파트 복원 / 패키지 무결성 ─────────
+
+def _part(path, name):
+    import zipfile
+    with zipfile.ZipFile(path) as z:
+        return z.read(name)
+
+
+def test_openpyxl_plain_save_breaks_external_link_relationship(tmp_path):
+    """회귀 방지: openpyxl 로만 저장하면 externalBook r:id 가 끊긴다 (엑셀 '복구하시겠습니까?' 의 원인)."""
+    f = add_excel_style_external_link(make_invoice(tmp_path / "a.xlsx"))
+    assert wio.check_package_integrity(f) == []
+    load_workbook(f).save(tmp_path / "b.xlsx")
+    assert any("rId1" in p for p in wio.check_package_integrity(tmp_path / "b.xlsx"))
+
+
+def test_safe_save_restores_external_links_byte_for_byte(tmp_path):
+    f = add_excel_style_external_link(make_invoice(tmp_path / "청구서.xlsx"))
+    orig_xml = _part(f, "xl/externalLinks/externalLink1.xml")
+    orig_rels = _part(f, "xl/externalLinks/_rels/externalLink1.xml.rels")
+    wb, snap = _open_and_snap(f)
+    wb.create_sheet("1127새시트")
+    wio.safe_save(wb, f, snap, new_sheets=["1127새시트"])
+    assert _part(f, "xl/externalLinks/externalLink1.xml") == orig_xml
+    assert _part(f, "xl/externalLinks/_rels/externalLink1.xml.rels") == orig_rels
+    assert wio.check_package_integrity(f) == []
+    assert load_workbook(f).sheetnames[-1] == "1127새시트"
+
+
+def test_safe_save_restores_drawing_unless_anchor_below_insertion(tmp_path):
+    f = add_excel_style_external_link(make_invoice(tmp_path / "청구서.xlsx"), drawing_comment="ORIGINAL")
+    wb, snap = _open_and_snap(f)
+    wb.create_sheet("새1")
+    wio.safe_save(wb, f, snap, new_sheets=["새1"], shifted_sheets={"견적서": 10_000})   # 앵커는 삽입 행 위
+    assert b"ORIGINAL" in _part(f, "xl/drawings/drawing1.xml")
+
+    g = add_excel_style_external_link(make_invoice(tmp_path / "g.xlsx"), drawing_comment="ORIGINAL")
+    wb, snap = _open_and_snap(g)
+    wb.create_sheet("새1")
+    wio.safe_save(wb, g, snap, new_sheets=["새1"], shifted_sheets={"견적서": 1})        # 앵커가 삽입 행 아래 → 복원 안 함
+    assert b"ORIGINAL" not in _part(g, "xl/drawings/drawing1.xml")
+    assert wio.check_package_integrity(g) == []

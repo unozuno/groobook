@@ -12,7 +12,7 @@ from typing import Callable, Optional
 
 from openpyxl.formula import Tokenizer
 from openpyxl.formula.tokenizer import Token
-from openpyxl.styles import Border, Side
+from openpyxl.styles import Side
 from openpyxl.utils import get_column_letter as L
 from openpyxl.utils.cell import coordinate_from_string
 
@@ -167,10 +167,6 @@ def insert_item_row(ws, layout: EstimateLayout) -> int:
             ws.cell(r + 1, c)._style = copy(style)
     for c in range(1, max_col + 1):
         ws.cell(at, c)._style = copy(saved[(src, c)])
-    # 새 줄의 O열(표 맨 오른쪽 칸) 우측 테두리는 두지 않는다 (원본/참조 청구서 모두 동일 규칙)
-    last = ws.cell(at, max_col)
-    b = copy(last.border)
-    last.border = Border(left=b.left, right=Side(), top=b.top, bottom=b.bottom)
 
     for row in ws.iter_rows():
         for cell in row:
@@ -178,6 +174,23 @@ def insert_item_row(ws, layout: EstimateLayout) -> int:
                 cell.value = shift_formula(cell.value, at, 1)
     _set_print_area_end(ws, at, 1)
     return at
+
+
+# ───────── 마지막 열(O) 우측 테두리 제거 ─────────
+
+def strip_last_column_right_border(ws, max_col: int) -> set[str]:
+    """시트 전 행의 마지막 열(O) 우측 테두리를 없애고 바뀐 셀 좌표를 돌려준다 (그 외 서식은 그대로).
+    견적서는 원본·참조 구분 없이 O열 우측 테두리를 두지 않는다."""
+    changed = set()
+    for r in range(1, ws.max_row + 1):
+        cell = ws.cell(r, max_col)
+        b = cell.border
+        if b is not None and b.right is not None and b.right.style:
+            nb = copy(b)
+            nb.right = Side()
+            cell.border = nb
+            changed.add(cell.coordinate)
+    return changed
 
 
 # ───────── 한 줄 쓰기 ─────────

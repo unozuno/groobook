@@ -8,6 +8,7 @@
   5. 교체       : 검증을 통과했을 때만 os.replace 로 원본을 교체 (실패하면 원본은 건드리지 않음)
 """
 import os
+import posixpath
 import re
 import shutil
 import uuid
@@ -176,6 +177,125 @@ def compare_snapshots(before: dict, after: dict, allowed: Optional[dict] = None,
     return problems
 
 
+# ───────── 저장 후 원본 파트 복원 · 패키지 무결성 ─────────
+# openpyxl 은 외부 링크(관계 2개 중 1개만 다시 씀 → r:id 끊김)와 그림 XML 을 원본과 다르게 다시 쓴다.
+# 엑셀이 "복구하시겠습니까?" 를 띄우므로, 우리가 바꾸지 않은 이 파트들은 원본 바이트 그대로 되돌린다.
+
+
+def _norm_target(base_dir: str, target: str) -> str:
+    return target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join(base_dir, target))
+
+
+def _rels_of(files: dict, part: str) -> dict:
+    """파트의 관계 {Id: (정규화된 대상, 종류, 외부 여부)}."""
+    rels_name = posixpath.join(posixpath.dirname(part), "_rels", posixpath.basename(part) + ".rels")
+    if rels_name not in files:
+        return {}
+    out = {}
+    for r in ET.fromstring(files[rels_name]):
+        external = r.get("TargetMode") == "External"
+        target = r.get("Target", "")
+        out[r.get("Id")] = (target if external else _norm_target(posixpath.dirname(part), target),
+                            r.get("Type", ""), external)
+    return out
+
+
+def _read_zip(path: Path):
+    with zipfile.ZipFile(path) as z:
+        return {n: z.read(n) for n in z.namelist()}, {i.filename: i for i in z.infolist()}
+
+
+def _workbook_parts(files: dict):
+    """(외부 링크 파트 목록(순서대로), {시트명: 시트 파트}) — workbook.xml 기준."""
+    wb = ET.fromstring(files["xl/workbook.xml"])
+    rels = _rels_of(files, "xl/workbook.xml")
+    ext = [rels[e.get(f"{_NS_REL}id")][0] for e in wb.iter(f"{_NS_MAIN}externalReference")
+           if e.get(f"{_NS_REL}id") in rels]
+    sheets = {sh.get("name"): rels[sh.get(f"{_NS_REL}id")][0] for sh in wb.iter(f"{_NS_MAIN}sheet")
+              if sh.get(f"{_NS_REL}id") in rels}
+    return ext, sheets
+
+
+def _sheet_drawing(files: dict, sheet_part: str) -> Optional[str]:
+    for target, typ, external in _rels_of(files, sheet_part).values():
+        if typ.endswith("/drawing") and not external:
+            return target
+    return None
+
+
+def restore_original_parts(tmp: Path, original: Path, shifted_sheets: Optional[dict] = None) -> int:
+    """tmp(방금 저장한 파일)의 외부 링크·그림 파트를 original 의 바이트로 되돌린다. 바뀐 파트 수를 돌려준다.
+    shifted_sheets: {시트명: 줄을 삽입한 행(1-based)} — 이 시트의 그림은 앵커가 삽입 행 위에 있을 때만 복원한다."""
+    shifted_sheets = shifted_sheets or {}
+    try:
+        orig, _ = _read_zip(original)
+        new, infos = _read_zip(tmp)
+        o_ext, o_sheets = _workbook_parts(orig)
+        n_ext, n_sheets = _workbook_parts(new)
+    except (KeyError, ET.ParseError, zipfile.BadZipFile):
+        return 0
+    replace: dict[str, bytes] = {}
+
+    if o_ext and len(o_ext) == len(n_ext):
+        for o, n in zip(o_ext, n_ext):
+            if o not in orig or n not in new:
+                continue
+            replace[n] = orig[o]
+            o_rels = posixpath.join(posixpath.dirname(o), "_rels", posixpath.basename(o) + ".rels")
+            n_rels = posixpath.join(posixpath.dirname(n), "_rels", posixpath.basename(n) + ".rels")
+            if o_rels in orig:
+                replace[n_rels] = orig[o_rels]
+
+    for title, o_sheet in o_sheets.items():
+        n_sheet = n_sheets.get(title)
+        o_dr = _sheet_drawing(orig, o_sheet)
+        n_dr = _sheet_drawing(new, n_sheet) if n_sheet else None
+        if not o_dr or not n_dr or o_dr not in orig or n_dr not in new:
+            continue
+        o_rels, n_rels = _rels_of(orig, o_dr), _rels_of(new, n_dr)
+        if set(o_rels) != set(n_rels) or any(orig.get(o_rels[i][0]) is None or
+                                             orig.get(o_rels[i][0]) != new.get(n_rels[i][0]) for i in o_rels):
+            continue
+        at = shifted_sheets.get(title)
+        if at is not None:
+            rows = [int(x) for x in re.findall(rb"<(?:\w+:)?row>(\d+)</(?:\w+:)?row>", orig[o_dr])]
+            if any(r >= at - 1 for r in rows):
+                continue
+        replace[n_dr] = orig[o_dr]
+
+    replace = {k: v for k, v in replace.items() if new.get(k) != v}
+    if not replace:
+        return 0
+    out = tmp.with_name(tmp.name + ".parts")
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name, data in new.items():
+            zout.writestr(infos[name], replace.get(name, data), compress_type=zipfile.ZIP_DEFLATED)
+    shutil.copyfile(out, tmp)
+    out.unlink()
+    return len(replace)
+
+
+def check_package_integrity(path: Path) -> list[str]:
+    """관계 파일(.rels)의 대상 파트가 없거나, 파트가 쓰는 r:id/r:embed/r:link 가 관계에 없으면 문제로 돌려준다."""
+    files, _ = _read_zip(path)
+    problems = []
+    for name in files:
+        if not name.endswith(".rels"):
+            continue
+        src = name.replace("_rels/", "", 1).removesuffix(".rels")
+        base = posixpath.dirname(src)
+        ids = set()
+        for r in ET.fromstring(files[name]):
+            ids.add(r.get("Id"))
+            if r.get("TargetMode") != "External" and _norm_target(base, r.get("Target", "")) not in files:
+                problems.append(f"{name}: 없는 파트를 가리킴 ({r.get('Target')})")
+        if src in files and src.endswith(".xml"):
+            used = set(re.findall(rb'r:(?:id|embed|link)="([^"]+)"', files[src]))
+            for u in sorted(x.decode() for x in used if x.decode() not in ids):
+                problems.append(f"{src}: 관계 {u} 가 {name} 에 없음")
+    return problems
+
+
 # ───────── 안전 저장 ─────────
 
 _NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -240,7 +360,7 @@ def inject_cached_values(path: Path, values: dict) -> int:
 
 def safe_save(wb, path: Path, before: dict, allowed: Optional[dict] = None,
               new_sheets: Optional[list] = None, expected: Optional[dict] = None,
-              cached: Optional[dict] = None) -> Path:
+              cached: Optional[dict] = None, shifted_sheets: Optional[dict] = None) -> Path:
     """검증을 통과했을 때만 원본을 교체한다. 백업 파일 경로를 돌려준다.
     cached: {시트명: {셀: 숫자}} — 새로 쓴 수식 셀의 계산값 (inject_cached_values 참고)."""
     check_writable(path)
@@ -251,6 +371,13 @@ def safe_save(wb, path: Path, before: dict, allowed: Optional[dict] = None,
         wb.save(tmp)
         if cached:
             inject_cached_values(tmp, cached)
+        restore_original_parts(tmp, path, shifted_sheets)
+        try:
+            broken = sorted(set(check_package_integrity(tmp)) - set(check_package_integrity(path)))
+        except (ET.ParseError, zipfile.BadZipFile) as e:
+            broken = [f"패키지를 읽을 수 없음: {e}"]
+        if broken:
+            raise WorkbookIOError("저장 결과 파일 구조 검사에 실패해 원본을 그대로 두었습니다: " + " / ".join(broken[:3]))
         reloaded = open_workbook(tmp)
         try:
             problems = compare_snapshots(before, snapshot(reloaded), allowed, new_sheets, expected)

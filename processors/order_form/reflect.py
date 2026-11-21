@@ -122,10 +122,13 @@ def _reflect_invoice(order: Order, desktop: Path, due: date, dry_run: bool, out:
             total_row = delivery_total_row(note.row_count)
             es.write_item_row(est, layout, row, note.lines[0].item.name, sheet, total_row, due.month, due.day)
             # 엑셀 밖(미리보기 등)에서도 0 이 아닌 값이 보이도록 모든 수식의 계산값을 함께 기록한다
+            stripped = es.strip_last_column_right_border(est, layout.max_col)
             cached = cc.compute_cached(wb, orig_cache, snap, volatile=(es.ESTIMATE_SHEET,))
             try:
-                backup = wio.safe_save(wb, path, snap, allowed={es.ESTIMATE_SHEET: es.row_coords(layout, row)},
-                                       new_sheets=[sheet], expected=expected, cached=cached)
+                backup = wio.safe_save(wb, path, snap,
+                                       allowed={es.ESTIMATE_SHEET: es.row_coords(layout, row) | stripped},
+                                       new_sheets=[sheet], expected=expected, cached=cached,
+                                       shifted_sheets={es.ESTIMATE_SHEET: row} if free is None else None)
             except wio.WorkbookIOError as e:
                 out.items.append(ReflectItem(INVOICE, note.campus, "error", str(e), str(path), sheet))
                 continue

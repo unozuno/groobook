@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 
 from processors.order_form import reflect as rf
 from processors.order_form import workbook_io as wio
-from xlsx_fixtures import DATA_FIRST, TOTAL_ROW, make_desktop, make_marketing
+from xlsx_fixtures import DATA_FIRST, TOTAL_ROW, add_excel_style_external_link, make_desktop, make_marketing
 
 DUE = "2026-11-27"
 ITEMS = [
@@ -65,6 +65,40 @@ def test_invoice_sheet_appended_at_end(make_order, desk):
     assert wb["견적서"]["G13"].value == "='1008내신블랭크'!C17"
     assert wb["1008내신블랭크"]["B9"].value == "기존 제품"
     assert wb.calculation.fullCalcOnLoad is True
+
+
+def _xml_right_border_styles(path, sheet_part, col="O"):
+    """openpyxl 은 읽을 때 병합 가장자리 테두리를 다시 계산하므로, 실제 저장된 XML 에서 O열 우측 테두리를 읽는다."""
+    import re
+    import zipfile
+    from xml.etree import ElementTree as ET
+    ns = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    with zipfile.ZipFile(path) as z:
+        styles = ET.fromstring(z.read("xl/styles.xml"))
+        sheet = ET.fromstring(z.read(sheet_part))
+    borders = styles.find("m:borders", ns).findall("m:border", ns)
+    xfs = styles.find("m:cellXfs", ns).findall("m:xf", ns)
+    out = {}
+    for c in sheet.iter("{%s}c" % ns["m"]):
+        m = re.fullmatch(col + r"(\d+)", c.get("r"))
+        if m:
+            right = borders[int(xfs[int(c.get("s", 0))].get("borderId", 0))].find("m:right", ns)
+            out[int(m.group(1))] = right.get("style") if right is not None else None
+    return out
+
+
+def test_invoice_reflect_strips_column_o_right_border_and_keeps_external_links(make_order, desk):
+    import zipfile
+    path = add_excel_style_external_link(invoice_path(desk))
+    before = zipfile.ZipFile(path).read("xl/externalLinks/externalLink1.xml")
+    items = run(order_for(make_order), desk, targets=("invoice",))
+    assert [i.status for i in items] == ["done"]
+    o_right = _xml_right_border_styles(path, "xl/worksheets/sheet1.xml")
+    assert o_right and all(v is None for v in o_right.values())
+    ws = load_workbook(path)["견적서"]
+    assert ws["K13"].border.right.style == "thin"          # 다른 열 테두리는 그대로
+    assert zipfile.ZipFile(path).read("xl/externalLinks/externalLink1.xml") == before
+    assert wio.check_package_integrity(path) == []
 
 
 def test_invoice_existing_sheet_is_skipped(make_order, desk):

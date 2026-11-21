@@ -144,19 +144,21 @@ def test_insert_keeps_existing_borders_of_merged_edge_cells():
     after = _borders(ws)
     for (r, c), sig in before.items():
         assert after[(r + 1 if r >= at else r, c)] == sig, (r, c)
-    # 새 줄 = 소스 줄(바로 위 줄)의 칸별 테두리, 단 O열 우측 테두리는 없음
-    for c in range(1, 15):
+    # 새 줄 = 소스 줄(바로 위 줄)의 칸별 테두리 (O열 우측 제거는 strip_last_column_right_border 가 따로 한다)
+    for c in range(1, 16):
         assert after[(at, c)] == before[(at - 1, c)], c
-    left, _, top, bottom = before[(at - 1, 15)]
-    assert after[(at, 15)] == (left, None, top, bottom)
 
 
-def test_inserted_row_has_no_right_border_on_last_column():
-    _, ws = make_ws(filled=0)
+def test_strip_last_column_right_border_only_touches_column_o():
+    _, ws = make_ws(filled=1)
     lay = es.find_layout(ws)
-    for r in range(lay.first, lay.last + 1):
-        ws.cell(r, 2).value = "x"
-    assert ws.cell(lay.last, 15).border.right.style == "thin"
-    at = es.insert_item_row(ws, lay)
-    assert ws.cell(at, 15).border.right.style is None
-    assert ws.cell(at - 1, 15).border.right.style == "thin"      # 기존 줄은 그대로
+    before = _borders(ws)
+    assert any(sig[1] == "thin" for (r, c), sig in before.items() if c == 15)
+    changed = es.strip_last_column_right_border(ws, lay.max_col)
+    after = _borders(ws)
+    assert changed and all(coord.startswith("O") for coord in changed)
+    for (r, c), sig in before.items():
+        if c == 15:
+            assert after[(r, c)] == (sig[0], None, sig[2], sig[3]), (r, c)
+        else:
+            assert after[(r, c)] == sig, (r, c)
